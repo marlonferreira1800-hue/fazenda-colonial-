@@ -1,0 +1,134 @@
+{
+  "metadata": {
+    "tema": "Período Colonial do Brasil",
+    "periodo": "1500-1822",
+    "moeda_principal": "Réis",
+    "moedas_secundarias": ["Pataca", "Peça de Ouro", "Escambo"]
+  },
+  "eras": [
+    {
+      "id": "pre_colonial",
+      "nome": "Período Pré-Colonial",
+      "anos": "1500-1530",
+      "economia": ["Pau-Brasil", "Escambo"],
+      "foco": "Exploração costeira e feitorias"
+    },
+    {
+      "id": "ciclo_acucar",
+      "nome": "Ciclo da Cana-de-Açúcar",
+      "anos": "1530-1700",
+      "economia": ["Cana-de-açúcar", "Açúcar", "Tabaco"],
+      "foco": "Engenhos no Nordeste, trabalho escravizado e defesa contra invasões"
+    },
+    {
+      "id": "expansao_interior",
+      "nome": "Bandeiras, Pecuária e Quilombos",
+      "anos": "1600-1750",
+      "economia": ["Pecuária", "Drogas do Sertão"],
+      "foco": "Interiorização do território e resistência quilombola"
+    },
+    {
+      "id": "ciclo_ouro",
+      "nome": "Ciclo do Ouro e Diamantes",
+      "anos": "1700-1808",
+      "economia": ["Ouro", "Diamantes"],
+      "foco": "Mineração em Minas Gerais, urbanização barroca e impostos da Coroa"
+    },
+    {
+      "id": "joanino_independencia",
+      "nome": "Período Joanino e Independência",
+      "anos": "1808-1822",
+      "economia": ["Comércio Internacional", "Algodão", "Café inicial"],
+      "foco": "Chegada da Família Real, Abertura dos Portos e Independência"
+    }
+  ],
+  "biomas": [
+    {
+      "id": "litoral_mata",
+      "nome": "Litoral e Mata Atlântica",
+      "elementos": ["Praias", "Manguezais", "Árvores de Pau-Brasil", "Portos", "Feitorias"],
+      "fauna": ["Arara", "Macaco", "Capivara", "Onça-pintada"]
+    },
+    {
+      "id": "engenho",
+      "nome": "Engenho de Açúcar",
+      "estruturas": ["Casa-Grande", "Senzala", "Capela", "Moenda", "Caldeiras", "Casa de Purgar"],
+      "fauna": ["Boi", "Cavalo", "Porco"]
+    },
+    {
+      "id": "vila_colonial",
+      "nome": "Vila / Cidade Histórica",
+      "exemplos": ["Salvador", "Olinda", "Ouro Preto", "Mariana", "Tiradentes", "Paraty"],
+      "arquitetura": ["Sobrados", "Casas térreas geminadas", "Igrejas barrocas", "Ruas de pedra sem calçada"]
+    },
+    {
+      "id": "quilombo",
+      "nome": "Quilombo",
+      "exemplos": ["Quilombo dos Palmares (Serra da Barriga)"],
+      "estruturas": ["Casas de pau a pique com palha", "Paliçadas", "Roças de subsistência"],
+      "recursos": ["Mandioca", "Milho", "Feijão"]
+    },
+    {
+      "id": "forte",
+      "nome": "Fortificação Costeira ou Fluvial",
+      "exemplos": ["Forte de São Marcelo", "Forte de Santa Cruz", "Forte dos Reis Magos"],
+      "arquitetura": ["Traça italiana (estrelada)", "Muralhas inclinadas", "Baterias de canhões"]
+    },
+    {
+      "id": "sertao",
+      "nome": "Sertão e Estradas Reais",
+      "elementos": ["Trilhas de terra", "Rios navegáveis", "Pousos de tropeiros"],
+      "fauna": ["Mula", "Boi", "Onça-pintada", "Cobras"]
+    }
+  ],
+  "faccoes": [
+    { "id": "coroa", "nome": "Coroa Portuguesa", "roles": ["Juiz", "Fiscal do Quinto", "Capitão-mor", "Soldado"] },
+    { "id": "elite_rural", "nome": "Senhores de Engenho e Mineradores", "roles": ["Senhor de Engenho", "Dono de Lavra"] },
+    { "id": "bandeirantes", "nome": "Bandeirantes e Tropeiros", "roles": ["Bandeirante", "Tropeiro"] },
+    { "id": "clero", "nome": "Clero e Jesuítas", "roles": ["Padre", "Jesuíta"] },
+    { "id": "quilombolas", "nome": "Resistência Quilombola", "roles": ["Líder Quilombola", "Guerreiro", "Agricultor"] },
+    { "id": "indigenas", "nome": "Povos Originários", "roles": ["Cacique", "Guerreiro", "Guia"] },
+    { "id": "artesao_urbano", "nome": "Trabalhadores Urbanos", "roles": ["Ferreiro", "Carpinteiro", "Pedreiro", "Sapateiro", "Alfaiate", "Ganhadeira"] },
+    { "id": "invasores", "nome": "Invasores Europeus", "roles": ["Soldado Holandês", "Corsário Francês"] }
+  ],
+  "itens": [
+    { "id": "pau_brasil", "nome": "Tora de Pau-Brasil", "categoria": "recurso", "era": "pre_colonial" },
+    { "id": "cana", "nome": "Cana-de-Açúcar", "categoria": "recurso", "era": "ciclo_acucar" },
+    { "id": "acucar", "nome": "Caixa de Açúcar", "categoria": "comercio", "era": "ciclo_acucar" },
+    { "id": "ouro_po", "nome": "Ouro em Pó", "categoria": "recurso", "era": "ciclo_ouro" },
+    { "id": "diamante", "nome": "Diamante Bruto", "categoria": "recurso", "era": "ciclo_ouro" },
+    { "id": "drogas_sertao", "nome": "Drogas do Sertão", "categoria": "comercio", "era": "expansao_interior" },
+    { "id": "mandioca", "nome": "Farinha de Mandioca", "categoria": "alimento", "era": "todas" },
+    { "id": "pataca", "nome": "Pataca de Prata", "categoria": "moeda", "era": "ciclo_ouro" }
+  ],
+  "armas": [
+    { "id": "arcabuz", "nome": "Arcabuz", "tipo": "fogo", "alcance": "medio", "recarga": "lenta" },
+    { "id": "mosquete", "nome": "Mosquete de Pederneira", "tipo": "fogo", "alcance": "longo", "recarga": "lenta" },
+    { "id": "pistola", "nome": "Pistola de Pederneira", "tipo": "fogo", "alcance": "curto", "recarga": "lenta" },
+    { "id": "espada", "nome": "Espada / Sabre", "tipo": "branca", "alcance": "curto", "recarga": "rapida" },
+    { "id": "facao", "nome": "Facão", "tipo": "branca", "alcance": "curto", "recarga": "rapida" },
+    { "id": "pique", "nome": "Lança / Pique", "tipo": "branca", "alcance": "medio", "recarga": "media" },
+    { "id": "arco_flecha", "nome": "Arco e Flecha", "tipo": "distancia", "alcance": "longo", "recarga": "rapida" },
+    { "id": "borduna", "nome": "Borduna", "tipo": "branca", "alcance": "curto", "recarga": "media" },
+    { "id": "zarabatana", "nome": "Zarabatana", "tipo": "distancia", "alcance": "medio", "recarga": "media" },
+    { "id": "canhao", "nome": "Canhão de Bronze/Ferro", "tipo": "artilharia", "alcance": "muito_longo", "recarga": "muito_lenta" }
+  ],
+  "transportes": [
+    { "id": "caravela", "nome": "Caravela / Nau", "meio": "maritimo", "velocidade": "media", "capacidade": "alta" },
+    { "id": "jangada", "nome": "Jangada", "meio": "costeiro", "velocidade": "media", "capacidade": "baixa" },
+    { "id": "canoa", "nome": "Canoa de Tronco", "meio": "fluvial", "velocidade": "rapida", "capacidade": "baixa" },
+    { "id": "carro_boi", "nome": "Carro de Boi", "meio": "terrestre", "velocidade": "lenta", "capacidade": "alta" },
+    { "id": "tropa_mulas", "nome": "Tropa de Mulas", "meio": "terrestre", "velocidade": "media", "capacidade": "media" }
+  ],
+  "eventos_historicos": [
+    { "ano": 1500, "nome": "Chegada de Cabral", "local": "Litoral da Bahia" },
+    { "ano": 1532, "nome": "Fundação de São Vicente e Capitanias Hereditárias", "local": "Litoral Paulista" },
+    { "ano": 1549, "nome": "Instalação do Governo-Geral", "local": "Salvador" },
+    { "ano": 1630, "nome": "Invasões Holandesas no Nordeste", "local": "Pernambuco" },
+    { "ano": 1695, "nome": "Queda de Zumbi dos Palmares", "local": "Serra da Barriga (AL)" },
+    { "ano": 1789, "nome": "Inconfidência Mineira", "local": "Vila Rica (Ouro Preto)" },
+    { "ano": 1798, "nome": "Conjuração Baiana (Revolta dos Alfaiates)", "local": "Salvador" },
+    { "ano": 1808, "nome": "Chegada da Família Real e Abertura dos Portos", "local": "Rio de Janeiro / Bahia" },
+    { "ano": 1822, "nome": "Proclamação da Independência", "local": "Riacho Ipiranga (SP)" }
+  ]
+}

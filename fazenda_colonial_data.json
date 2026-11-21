@@ -1,0 +1,135 @@
+{
+  "moeda": "Réis",
+  "culturas": [
+    {
+      "id": "mandioca",
+      "nome": "Mandioca",
+      "dias_crescimento": 5,
+      "rebrota": false,
+      "rega_diaria": false,
+      "preco_semente_reis": 15,
+      "preco_venda_bruta_reis": 40,
+      "produto_processado": "farinha_mandioca",
+      "preco_processado_reis": 95
+    },
+    {
+      "id": "milho",
+      "nome": "Milho",
+      "dias_crescimento": 4,
+      "rebrota": false,
+      "rega_diaria": true,
+      "preco_semente_reis": 12,
+      "preco_venda_bruta_reis": 35,
+      "produto_processado": "fuba",
+      "preco_processado_reis": 70
+    },
+    {
+      "id": "feijao",
+      "nome": "Feijão",
+      "dias_crescimento": 4,
+      "rebrota": true,
+      "rega_diaria": true,
+      "preco_semente_reis": 18,
+      "preco_venda_bruta_reis": 45,
+      "produto_processado": null,
+      "preco_processado_reis": null
+    },
+    {
+      "id": "cana_acucar",
+      "nome": "Cana-de-Açúcar",
+      "dias_crescimento": 8,
+      "rebrota": true,
+      "rega_diaria": true,
+      "preco_semente_reis": 40,
+      "preco_venda_bruta_reis": 60,
+      "produto_processado": "acucar_mascavo",
+      "preco_processado_reis": 220
+    },
+    {
+      "id": "tabaco",
+      "nome": "Tabaco",
+      "dias_crescimento": 6,
+      "rebrota": false,
+      "rega_diaria": true,
+      "preco_semente_reis": 35,
+      "preco_venda_bruta_reis": 75,
+      "produto_processado": "rolo_fumo",
+      "preco_processado_reis": 190
+    },
+    {
+      "id": "algodao",
+      "nome": "Algodão",
+      "dias_crescimento": 7,
+      "rebrota": false,
+      "rega_diaria": true,
+      "preco_semente_reis": 30,
+      "preco_venda_bruta_reis": 70,
+      "produto_processado": "fardo_algodao",
+      "preco_processado_reis": 160
+    }
+  ],
+  "animais": [
+    {
+      "id": "galinha",
+      "nome": "Galinha",
+      "custo_reis": 120,
+      "producao": "ovo",
+      "intervalo_dias": 1,
+      "funcao_extra": null
+    },
+    {
+      "id": "porco",
+      "nome": "Porco",
+      "custo_reis": 280,
+      "producao": "banha_carne",
+      "intervalo_dias": 4,
+      "funcao_extra": null
+    },
+    {
+      "id": "vaca",
+      "nome": "Vaca Leiteira",
+      "custo_reis": 450,
+      "producao": "leite",
+      "intervalo_dias": 1,
+      "funcao_extra": "queijo"
+    },
+    {
+      "id": "boi",
+      "nome": "Boi de Tração",
+      "custo_reis": 600,
+      "producao": "couro",
+      "intervalo_dias": 7,
+      "funcao_extra": "tracao_moenda_e_carro"
+    },
+    {
+      "id": "mula",
+      "nome": "Mula de Carga",
+      "custo_reis": 520,
+      "producao": null,
+      "intervalo_dias": 0,
+      "funcao_extra": "transporte_vila"
+    }
+  ],
+  "construcoes": [
+    { "id": "casa_sede", "nome": "Casa Sede (Taipa)", "funcao": "descanso_e_financas" },
+    { "id": "casa_farinha", "nome": "Casa de Farinha", "funcao": "processar_mandioca" },
+    { "id": "moenda_caldeira", "nome": "Moenda e Caldeira", "funcao": "processar_cana" },
+    { "id": "secador_fumo", "nome": "Secador de Tabaco", "funcao": "processar_tabaco" },
+    { "id": "curral", "nome": "Curral de Madeira", "funcao": "abrigar_gado" },
+    { "id": "paiol", "nome": "Paiol / Armazém", "funcao": "estocar_colheita" },
+    { "id": "poco", "nome": "Poço de Pedra", "funcao": "agua_irrigacao" },
+    { "id": "roda_agua", "nome": "Roda d'Água", "funcao": "automatizar_moenda" }
+  ],
+  "ferramentas": [
+    { "id": "enxada", "nome": "Enxada", "acao": "arar_solo" },
+    { "id": "regador", "nome": "Balde / Regador de Madeira", "acao": "regar" },
+    { "id": "facao", "nome": "Facão", "acao": "colher_e_cortar_mato" },
+    { "id": "machado", "nome": "Machado", "acao": "cortar_madeira_lenha" },
+    { "id": "picareta", "nome": "Picareta", "acao": "quebrar_pedras" }
+  ],
+  "receitas_processamento": [
+    { "estacao": "casa_farinha", "entrada": "mandioca", "qtd_entrada": 2, "saida": "farinha_mandioca", "tempo_horas": 4 },
+    { "estacao": "moenda_caldeira", "entrada": "cana_acucar", "qtd_entrada": 3, "saida": "acucar_mascavo", "tempo_horas": 8, "requer_lenha": true },
+    { "estacao": "secador_fumo", "entrada": "tabaco", "qtd_entrada": 2, "saida": "rolo_fumo", "tempo_horas": 12 }
+  ]
+}

@@ -1,0 +1,53 @@
+CC0 1.0 Universal (Public Domain Dedication) — Pacotes OpenGameArt CC0 baixados
+
+Todos os arquivos desta pasta foram obtidos por download direto limpo do OpenGameArt.org
+sob a licença CC0 1.0 Universal (Domínio Público — sem exigência de atribuição,
+uso livre em projetos pessoais e comerciais, permissão total de modificação):
+
+1. oga_16x16_food_cc0/
+   - Título: 16x16 Food
+   - Autor: ARoachIFoundOnMyPillow
+   - Página: https://opengameart.org/content/16x16-food
+   - Arquivo direto: https://opengameart.org/sites/default/files/food_0.zip
+   - Licença declarada na página: CC0 (https://creativecommons.org/publicdomain/zero/1.0/)
+
+2. oga_16x16_fruits_cc0/
+   - Título: 16x16 Fruits
+   - Autor: Leozlk
+   - Página: https://opengameart.org/content/16x16-fruits
+   - Arquivo direto: https://opengameart.org/sites/default/files/fruits_8.png
+   - Licença declarada na página: CC0 (https://creativecommons.org/publicdomain/zero/1.0/)
+
+3. oga_pixel_animals_16x16_cc0/
+   - Título: Pixel Animals 16x16
+   - Autor: GrumpyDiamond
+   - Página: https://opengameart.org/content/pixel-animals-16x16
+   - Arquivo direto: https://opengameart.org/sites/default/files/Animals.png
+   - Licença declarada na página: CC0 (https://creativecommons.org/publicdomain/zero/1.0/)
+
+4. oga_farming_set_cc0/
+   - Título: Farming Set (Pixel-Art)
+   - Autor: ScratchIO
+   - Página: https://opengameart.org/content/farming-set-pixel-art
+   - Arquivo direto: https://opengameart.org/sites/default/files/Farming%20Stuff.zip
+   - Licença declarada na página: CC0 (https://creativecommons.org/publicdomain/zero/1.0/)
+
+5. oga_roguelike_indoor_cc0/
+   - Título: Roguelike Indoor pack
+   - Autor: Kenney Vleugels (www.kenney.nl) / OpenGameArt
+   - Página: https://opengameart.org/content/roguelike-indoor-pack
+   - Arquivo direto: https://opengameart.org/sites/default/files/Roguelike%20Indoor%20pack.zip
+   - Licença declarada na página: CC0 (https://creativecommons.org/publicdomain/zero/1.0/)
+
+6. oga_zelda_like_indoor_cc0/
+   - Título: Zelda-like tilesets and sprites
+   - Autor: ArMM1998 (OpenGameArt)
+   - Página: https://opengameart.org/content/zelda-like-tilesets-and-sprites
+   - Arquivo direto: https://opengameart.org/sites/default/files/gfx_3.zip
+   - Licença declarada na página: CC0 (https://creativecommons.org/publicdomain/zero/1.0/)
+
+Texto resumido CC0 1.0 Universal:
+To the extent possible under law, the authors have waived all copyright and
+related or neighboring rights to these works. You can copy, modify, distribute
+and perform the work, even for commercial purposes, all without asking permission.
+Texto completo oficial: https://creativecommons.org/publicdomain/zero/1.0/legalcode
