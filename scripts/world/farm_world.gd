@@ -9,6 +9,7 @@ const VillageDataScript := preload("res://scripts/data/village_data.gd")
 const VillagerScript := preload("res://scripts/world/villager.gd")
 const StoryDataScript := preload("res://scripts/data/story_data.gd")
 const VillageWorldScript := preload("res://scripts/world/village_world.gd")
+const SitioRealmWorldScript := preload("res://scripts/world/sitio_realm_world.gd")
 
 const TILE_SIZE: int = 16
 const MAP_WIDTH: int = 68
@@ -49,6 +50,7 @@ const HOUSE_DOOR_TILES: Array[Vector2i] = [
 ]
 const HOUSE_ORIGIN := Vector2(2000.0, 0.0)
 const VILLAGE_ORIGIN := Vector2(2800.0, 0.0)
+const REALM_ORIGIN := Vector2(4000.0, 0.0)
 const VILLAGE_EXIT_FARM_POS := Vector2(288.0, 520.0)
 const SACI_POS := Vector2(158.0, 224.0)
 const MULA_POS := Vector2(256.0, 332.0)
@@ -132,6 +134,10 @@ var _lamp_glows: Array[Sprite2D] = []
 var _tropeiro_body: StaticBody2D = null
 var _tropeiro_present: bool = false
 var _village_world: Node2D = null
+var _sitio_realm: Node2D = null
+var _realm_return_loc: String = "farm"
+var _realm_return_pos: Vector2 = Vector2(136.0, 118.0)
+var _sitio_relic_nodes: Dictionary = {}
 var _folklore_nodes: Dictionary = {}
 var _guide_tip_index: int = 0
 var _entered_house_once: bool = false
@@ -444,6 +450,7 @@ func _ready() -> void:
 	_spawn_villagers()
 	_setup_house_interior()
 	_setup_village_world()
+	_setup_sitio_realm()
 
 	if player != null:
 		player.global_position = Vector2(136.0, 118.0)
@@ -451,6 +458,9 @@ func _ready() -> void:
 			player.call("set_camera_limits", Rect2i(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE))
 
 	_set_exterior_active(true)
+
+	if hud != null and hud.has_signal("enter_sitio_realm_requested"):
+		hud.enter_sitio_realm_requested.connect(_enter_sitio_realm)
 
 	if _game_state != null:
 		if _game_state.has_signal("day_advanced"):
@@ -465,6 +475,8 @@ func _ready() -> void:
 			_game_state.machines_changed.connect(_refresh_machines)
 		if _game_state.has_signal("orders_changed"):
 			_game_state.orders_changed.connect(_refresh_order_badge)
+		if _game_state.has_signal("story_changed"):
+			_game_state.story_changed.connect(_refresh_sitio_relics)
 		if _game_state.has_signal("animal_purchased"):
 			_game_state.animal_purchased.connect(_on_animal_purchased)
 		if _game_state.has_signal("game_reset"):
@@ -482,6 +494,7 @@ func _ready() -> void:
 	_refresh_order_badge()
 	_refresh_tropeiro_presence()
 	_sync_villagers(true)
+	_refresh_sitio_relics()
 	_sync_weather_fx()
 	_update_day_night_tint()
 
@@ -541,6 +554,9 @@ func _process(delta: float) -> void:
 		elif _current_location == "village" and _village_world != null:
 			if moving_up and bool(_village_world.call("is_at_exit_threshold", player.global_position)):
 				_exit_village()
+		elif _current_location == "realm" and _sitio_realm != null:
+			if moving_down and bool(_sitio_realm.call("is_at_exit_portal", player.global_position)):
+				_exit_sitio_realm()
 
 	if _current_location == "farm":
 		_update_region_banner()
@@ -664,6 +680,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _current_location == "village":
 		if event.is_action_pressed("action_interact") or event.is_action_pressed("action_use"):
 			_handle_village_interact()
+			get_viewport().set_input_as_handled()
+			return
+		return
+
+	if _current_location == "realm":
+		if event.is_action_pressed("action_interact") or event.is_action_pressed("action_use"):
+			_handle_realm_interact()
 			get_viewport().set_input_as_handled()
 			return
 		return
@@ -952,6 +975,11 @@ func _on_game_reset() -> void:
 		if is_instance_valid(f_var):
 			(f_var as Node).queue_free()
 	_fertilized_tiles.clear()
+
+	for r_var in _sitio_relic_nodes.values():
+		if is_instance_valid(r_var):
+			(r_var as Node).queue_free()
+	_sitio_relic_nodes.clear()
 
 	for tile_var in _sprinklers.keys():
 		var spr_sp: Variant = _sprinklers[tile_var]
@@ -3356,6 +3384,21 @@ func _update_prompt_label(shop_open: bool) -> void:
 			_prompt_label.global_position = anchor - Vector2(_prompt_label.size.x * 0.5, 0.0)
 		return
 
+	if _current_location == "realm":
+		if _sitio_realm != null:
+			var near_r: Dictionary = _sitio_realm.call("get_nearest_interactable", p_pos)
+			if not near_r.is_empty():
+				hint = str(near_r.get("prompt", ""))
+				anchor = near_r.get("anchor", p_pos + Vector2(0.0, -24.0))
+		if hint.is_empty():
+			_prompt_label.visible = false
+		else:
+			_prompt_label.visible = true
+			_prompt_label.text = hint
+			_prompt_label.reset_size()
+			_prompt_label.global_position = anchor - Vector2(_prompt_label.size.x * 0.5, 0.0)
+		return
+
 	if _current_location == "house":
 		if _house_interior != null:
 			var near_obj: Dictionary = _house_interior.call("get_nearest_interactable", p_pos)
@@ -3687,6 +3730,11 @@ func _set_exterior_active(active: bool) -> void:
 			villager.visible = active
 			villager.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
 
+	for relic_node in _sitio_relic_nodes.values():
+		if is_instance_valid(relic_node) and relic_node is Node2D:
+			(relic_node as Node2D).visible = active
+			relic_node.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
+
 	if _house_interior != null and is_instance_valid(_house_interior):
 		var show_house: bool = (_current_location == "house")
 		_house_interior.visible = show_house
@@ -3697,10 +3745,14 @@ func _apply_location_state(loc: String, target_pos: Vector2, facing: Vector2i) -
 	_current_location = loc
 	var inside_house: bool = (loc == "house")
 	var in_village: bool = (loc == "village")
+	var in_realm: bool = (loc == "realm")
 	_set_exterior_active(loc == "farm")
 	if _village_world != null and is_instance_valid(_village_world):
 		_village_world.visible = in_village
 		_village_world.process_mode = Node.PROCESS_MODE_INHERIT if in_village else Node.PROCESS_MODE_DISABLED
+	if _sitio_realm != null and is_instance_valid(_sitio_realm):
+		_sitio_realm.visible = in_realm
+		_sitio_realm.process_mode = Node.PROCESS_MODE_INHERIT if in_realm else Node.PROCESS_MODE_DISABLED
 
 	if player != null:
 		var target_parent: Node = self
@@ -3708,6 +3760,8 @@ func _apply_location_state(loc: String, target_pos: Vector2, facing: Vector2i) -
 			target_parent = _house_interior
 		elif in_village and _village_world != null:
 			target_parent = _village_world
+		elif in_realm and _sitio_realm != null:
+			target_parent = _sitio_realm
 		if player.get_parent() != target_parent:
 			player.reparent(target_parent, true)
 		player.global_position = target_pos
@@ -3723,6 +3777,10 @@ func _apply_location_state(loc: String, target_pos: Vector2, facing: Vector2i) -
 			var v_cam: Rect2i = _village_world.call("get_camera_bounds")
 			if player.has_method("set_camera_limits"):
 				player.call("set_camera_limits", v_cam)
+		elif in_realm and _sitio_realm != null:
+			var r_cam: Rect2i = _sitio_realm.call("get_camera_bounds")
+			if player.has_method("set_camera_limits"):
+				player.call("set_camera_limits", r_cam)
 		elif player.has_method("set_camera_limits"):
 			player.call("set_camera_limits", Rect2i(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE))
 		if player.has_method("snap_camera"):
@@ -3740,6 +3798,207 @@ func _setup_village_world() -> void:
 	_village_world.visible = false
 	_village_world.process_mode = Node.PROCESS_MODE_DISABLED
 	add_child(_village_world)
+
+
+func _setup_sitio_realm() -> void:
+	if _sitio_realm != null and is_instance_valid(_sitio_realm):
+		_sitio_realm.queue_free()
+	_sitio_realm = SitioRealmWorldScript.new()
+	_sitio_realm.name = "SitioRealmWorld"
+	_sitio_realm.position = REALM_ORIGIN
+	_sitio_realm.visible = false
+	_sitio_realm.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(_sitio_realm)
+
+
+func _enter_sitio_realm(realm_id: String) -> void:
+	if _sitio_realm == null or _is_transitioning:
+		return
+	if not StoryDataScript.SITIO_REALMS.has(realm_id):
+		return
+	if _current_location != "realm":
+		_realm_return_loc = _current_location
+		_realm_return_pos = player.global_position if player != null else Vector2(136.0, 118.0)
+	var realm_def: Dictionary = StoryDataScript.SITIO_REALMS[realm_id]
+	var loaded: bool = bool(_sitio_realm.call("load_realm", realm_id))
+	if not loaded:
+		return
+	var spawn_pos: Vector2 = _sitio_realm.call("get_spawn_world_pos")
+	_play_sfx("play_cozy")
+	if player != null:
+		_spawn_particles(player.global_position, Color(1.0, 0.90, 0.35))
+	_run_fade_transition(func() -> void:
+		_apply_location_state("realm", spawn_pos, Vector2i(0, -1))
+		_door_cooldown = 0.55
+		_spawn_particles(spawn_pos, Color(1.0, 0.92, 0.45))
+		_show_toast("✨ Pó de Pirlimpimpim! Bem-vindo a %s!" % str(realm_def.get("name", "Sítio")))
+	)
+
+
+func _exit_sitio_realm() -> void:
+	if _is_transitioning or _current_location != "realm":
+		return
+	_play_sfx("play_cozy")
+	var ret_loc: String = _realm_return_loc if _realm_return_loc in ["farm", "house", "village"] else "farm"
+	var ret_pos: Vector2 = _realm_return_pos
+	_run_fade_transition(func() -> void:
+		_apply_location_state(ret_loc, ret_pos, Vector2i(0, 1))
+		_door_cooldown = 0.55
+		_refresh_sitio_relics()
+		_spawn_particles(ret_pos, Color(1.0, 0.90, 0.42))
+		_show_toast("De volta à Fazenda Colonial com a magia do Sítio!")
+	)
+
+
+func _handle_realm_interact() -> void:
+	if _sitio_realm == null or player == null:
+		return
+	var near_r: Dictionary = _sitio_realm.call("get_nearest_interactable", player.global_position)
+	if near_r.is_empty():
+		return
+	var kind: String = str(near_r.get("kind", ""))
+	var obj_id: String = str(near_r.get("id", ""))
+	var world_pos: Vector2 = near_r.get("world_pos", player.global_position)
+	if kind == "realm_exit":
+		_exit_sitio_realm()
+	elif kind == "realm_npc":
+		var speaker: String = str(near_r.get("name", "Sítio"))
+		var lines: Array = near_r.get("lines", [])
+		_play_sfx("play_cozy")
+		if hud != null and hud.has_method("show_dialogue") and not lines.is_empty():
+			hud.call("show_dialogue", speaker, lines)
+	elif kind == "realm_magic":
+		_trigger_sitio_realm_magic(obj_id, world_pos)
+
+
+func _trigger_sitio_realm_magic(realm_id: String, world_pos: Vector2) -> void:
+	if _game_state == null or not StoryDataScript.SITIO_REALMS.has(realm_id):
+		return
+	var realm_def: Dictionary = StoryDataScript.SITIO_REALMS[realm_id]
+	var can_use: bool = bool(_game_state.call("can_use_sitio_magic", realm_id)) if _game_state.has_method("can_use_sitio_magic") else true
+	if not can_use:
+		_play_sfx("play_click")
+		_show_toast("Você já recebeu o encanto de %s hoje! Volte amanhã." % str(realm_def.get("magic_title", "Sítio")))
+		return
+
+	if _game_state.has_method("mark_sitio_magic_used"):
+		_game_state.call("mark_sitio_magic_used", realm_id)
+
+	_play_sfx("play_cozy")
+	_spawn_particles(world_pos + Vector2(0.0, -8.0), realm_def.get("particle_color", Color(1.0, 0.92, 0.45)))
+
+	match realm_id:
+		"varanda_sitio":
+			var max_stam: int = int(_game_state.get("max_stamina"))
+			_game_state.set("stamina", max_stam)
+			if _game_state.has_signal("stamina_changed"):
+				_game_state.stamina_changed.emit(max_stam, max_stam)
+			if _game_state.has_method("add_artisan"):
+				_game_state.call("add_artisan", "bread", 1, false)
+			_spawn_floating_text(world_pos + Vector2(0.0, -18.0), "✨ Energia 100% + Pão!", Color(1.0, 0.92, 0.48))
+			_show_toast("Bolinhos da Tia Nastácia! Energia restaurada + 1 Pão artesanal! Jabuticabeira adicionada à fazenda!")
+		"aguas_claras":
+			var watered_cnt: int = 0
+			for tile_var in _crops.keys():
+				var tile: Vector2i = tile_var as Vector2i
+				if soil_layer != null:
+					soil_layer.set_cell(tile, 0, TILE_SOIL_WET)
+					watered_cnt += 1
+			_spawn_floating_text(world_pos + Vector2(0.0, -18.0), "✨ Lavoura Regada!", Color(0.55, 0.94, 1.0))
+			_show_toast("Encanto das Águas Claras! %d plantações regadas na fazenda + Fonte Mágica desbloqueada!" % watered_cnt)
+		"biblioteca_visconde":
+			var grown_cnt: int = 0
+			for tile_var in _crops.keys():
+				var crop_info: Dictionary = _crops[tile_var]
+				var cur_stage: int = int(crop_info.get("stage", 0))
+				if cur_stage < 4:
+					var crop_id: String = str(crop_info["crop_id"])
+					var crop_def: Dictionary = _game_state.CROPS.get(crop_id, {})
+					var row: int = int(crop_def.get("row", 0))
+					var nxt_stage: int = mini(4, cur_stage + 1)
+					crop_info["days_grown"] = int(crop_info.get("days_grown", 0)) + 1
+					crop_info["stage"] = nxt_stage
+					var spr: Sprite2D = crop_info.get("sprite")
+					if is_instance_valid(spr):
+						spr.frame_coords = Vector2i(nxt_stage, clampi(row, 0, spr.vframes - 1))
+					grown_cnt += 1
+			_spawn_floating_text(world_pos + Vector2(0.0, -18.0), "✨ Lavouras Cresceram!", Color(1.0, 0.88, 0.38))
+			_show_toast("Sabedoria do Visconde! %d lavouras avançaram +1 estágio + Estante Sábia na fazenda!" % grown_cnt)
+		"capoeirao_saci":
+			var new_money: int = int(_game_state.get("money")) + 150
+			_game_state.set("money", new_money)
+			if _game_state.has_signal("money_changed"):
+				_game_state.money_changed.emit(new_money)
+			_spawn_floating_text(world_pos + Vector2(0.0, -18.0), "✨ +Rs 150!", Color(0.75, 1.0, 0.45))
+			_show_toast("Redemoinho da Fortuna! +Rs 150 encontrados na mata + Redemoinho Amigo na fazenda!")
+		"gruta_cuca":
+			var blessed_cnt: int = 0
+			for tile_var in _crops.keys():
+				if blessed_cnt >= 3:
+					break
+				var tile: Vector2i = tile_var as Vector2i
+				if not _fertilized_tiles.has(tile):
+					_create_fertilizer_sprite(tile)
+					blessed_cnt += 1
+			if blessed_cnt == 0:
+				var sup_dict: Dictionary = _game_state.get("supplies")
+				sup_dict["fertilizer"] = int(sup_dict.get("fertilizer", 0)) + 2
+				if _game_state.has_signal("inventory_changed"):
+					_game_state.inventory_changed.emit()
+				_spawn_floating_text(world_pos + Vector2(0.0, -18.0), "✨ +2 Fertilizantes!", Color(0.72, 1.0, 0.62))
+				_show_toast("Poção da Cuca! Você recebeu +2 Fertilizantes Ouro ★ + Caldeirão Borbulhante na fazenda!")
+			else:
+				_spawn_floating_text(world_pos + Vector2(0.0, -18.0), "✨ %d Ouro ★!" % blessed_cnt, Color(0.72, 1.0, 0.62))
+				_show_toast("Poção Dourada da Cuca! %d plantações enfeitiçadas com Ouro ★ + Caldeirão na fazenda!" % blessed_cnt)
+
+
+func _refresh_sitio_relics() -> void:
+	if _game_state == null:
+		return
+	var unlocked = _game_state.get("sitio_relics_unlocked")
+	if not (unlocked is Array):
+		return
+	var show_now: bool = (_current_location == "farm")
+	for rid_var in unlocked:
+		var rid: String = str(rid_var)
+		if _sitio_relic_nodes.has(rid) and is_instance_valid(_sitio_relic_nodes[rid]):
+			(_sitio_relic_nodes[rid] as Node2D).visible = show_now
+			continue
+		if not StoryDataScript.SITIO_REALMS.has(rid):
+			continue
+		var def: Dictionary = StoryDataScript.SITIO_REALMS[rid]
+		var tex := _load_texture_safe(str(def.get("relic_sprite", "")))
+		if tex == null:
+			continue
+		var relic := Node2D.new()
+		relic.name = "SitioRelic_" + rid
+		relic.position = def.get("relic_farm_pos", Vector2(216.0, 108.0))
+		relic.visible = show_now
+		relic.process_mode = Node.PROCESS_MODE_INHERIT if show_now else Node.PROCESS_MODE_DISABLED
+
+		var spr := Sprite2D.new()
+		spr.texture = tex
+		spr.offset = Vector2(0.0, -tex.get_height() * 0.45)
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		relic.add_child(spr)
+
+		var glow := CPUParticles2D.new()
+		glow.position = Vector2(0.0, -12.0)
+		glow.amount = 6
+		glow.lifetime = 2.0
+		glow.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+		glow.emission_sphere_radius = 10.0
+		glow.direction = Vector2(0.0, -1.0)
+		glow.gravity = Vector2(0.0, -3.0)
+		glow.initial_velocity_min = 3.0
+		glow.initial_velocity_max = 8.0
+		glow.scale_amount_min = 1.2
+		glow.scale_amount_max = 2.2
+		glow.color = def.get("particle_color", Color(1.0, 0.92, 0.45, 0.9))
+		relic.add_child(glow)
+
+		add_child(relic)
+		_sitio_relic_nodes[rid] = relic
 
 
 func _enter_village(instant: bool = false) -> void:

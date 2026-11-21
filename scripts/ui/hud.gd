@@ -12,6 +12,8 @@ const SeasonDataScript := preload("res://scripts/data/season_data.gd")
 const StoryDataScript := preload("res://scripts/data/story_data.gd")
 const MinimapModalScript := preload("res://scripts/ui/minimap_modal.gd")
 
+signal enter_sitio_realm_requested(realm_id: String)
+
 const FALLBACK_VERSION := "v1.6.2"
 const FALLBACK_AUTHOR := "@marlonferreira1800-hue (Marlon Ferreira)"
 const FALLBACK_RELEASES_URL := "https://github.com/marlonferreira1800-hue/Fazenda-asclepio-/releases"
@@ -197,6 +199,8 @@ var _book_page_counter_label: Label
 var _book_status_label: Label
 var _book_prev_btn: Button
 var _book_next_btn: Button
+var _book_magic_hint_label: Label
+var _book_enter_realm_btn: Button
 var _book_current_chapter: String = "serao_dona_benta"
 var _book_current_page: int = 0
 
@@ -1701,28 +1705,56 @@ func _build_book_modal() -> void:
 	_book_page_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text_scroll.add_child(_book_page_body_label)
 
+	_book_magic_hint_label = _make_label("", 7, COL_GOLD_TEXT)
+	_book_magic_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_book_magic_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page_vbox.add_child(_book_magic_hint_label)
+
 	# Footer navigation
 	main_vbox.add_child(_make_separator())
 
 	var footer := HBoxContainer.new()
-	footer.add_theme_constant_override("separation", 6)
+	footer.add_theme_constant_override("separation", 5)
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	main_vbox.add_child(footer)
 
-	_book_status_label = _make_label("♥ +10 Energia na 1ª leitura do dia", 7, COL_INK_MUTED)
+	_book_enter_realm_btn = _make_colored_button(
+		"✨ Entrar (Pirlimpimpim)",
+		Vector2(138, 19),
+		7,
+		Color("#c98a1e"),
+		Color("#e0a12b"),
+		Color("#9e6a12"),
+		Color("#6b4408"),
+		Color.WHITE
+	)
+	_book_enter_realm_btn.pressed.connect(func() -> void:
+		if not StoryDataScript.BOOK_CHAPTERS.has(_book_current_chapter):
+			return
+		var ch_d: Dictionary = StoryDataScript.BOOK_CHAPTERS[_book_current_chapter]
+		var r_id: String = str(ch_d.get("realm_id", ""))
+		if r_id.is_empty():
+			return
+		_play_click()
+		_set_book_open(false)
+		enter_sitio_realm_requested.emit(r_id)
+	)
+	footer.add_child(_book_enter_realm_btn)
+
+	_book_status_label = _make_label("", 7, COL_INK_MUTED)
 	_book_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer.add_child(_book_status_label)
 
-	_book_prev_btn = _make_wood_button("◀ Ant.", Vector2(56, 18), 7)
+	_book_prev_btn = _make_wood_button("◀ Ant.", Vector2(48, 18), 7)
 	_book_prev_btn.pressed.connect(func() -> void: _flip_book_page(-1))
 	footer.add_child(_book_prev_btn)
 
 	_book_page_counter_label = _make_label("1/1", 8, COL_WOOD_DARK)
 	_book_page_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_book_page_counter_label.custom_minimum_size = Vector2(32, 0)
+	_book_page_counter_label.custom_minimum_size = Vector2(26, 0)
 	footer.add_child(_book_page_counter_label)
 
-	_book_next_btn = _make_wood_button("Próx. ▶", Vector2(56, 18), 7)
+	_book_next_btn = _make_wood_button("Próx. ▶", Vector2(48, 18), 7)
 	_book_next_btn.pressed.connect(func() -> void: _flip_book_page(1))
 	footer.add_child(_book_next_btn)
 
@@ -1783,6 +1815,8 @@ func _refresh_storybook() -> void:
 
 	var cur_ch: Dictionary = StoryDataScript.BOOK_CHAPTERS.get(_book_current_chapter, StoryDataScript.BOOK_CHAPTERS[StoryDataScript.BOOK_CHAPTER_ORDER[0]])
 	var cur_unlocked: bool = bool(gs.call("is_book_chapter_unlocked", _book_current_chapter)) if gs != null and gs.has_method("is_book_chapter_unlocked") else true
+	var cur_realm_id: String = str(cur_ch.get("realm_id", ""))
+	var realm_def: Dictionary = StoryDataScript.SITIO_REALMS.get(cur_realm_id, {})
 
 	if cur_unlocked:
 		var pages: Array = cur_ch.get("pages", [])
@@ -1794,6 +1828,12 @@ func _refresh_storybook() -> void:
 		_book_page_counter_label.text = "%d/%d" % [_book_current_page + 1, page_count]
 		_book_prev_btn.disabled = (_book_current_page <= 0)
 		_book_next_btn.disabled = (_book_current_page >= page_count - 1)
+		if _book_enter_realm_btn != null:
+			_book_enter_realm_btn.disabled = realm_def.is_empty()
+		if _book_magic_hint_label != null and not realm_def.is_empty():
+			var can_magic: bool = bool(gs.call("can_use_sitio_magic", cur_realm_id)) if gs != null and gs.has_method("can_use_sitio_magic") else true
+			var magic_state: String = "Disponível hoje ✨" if can_magic else "Já usado hoje ✓"
+			_book_magic_hint_label.text = "Cenário: %s — %s (%s)" % [str(realm_def.get("name", "")), str(realm_def.get("magic_desc", "")), magic_state]
 	else:
 		_book_chapter_title_label.text = "Capítulo Bloqueado"
 		_book_chapter_subtitle_label.text = str(cur_ch.get("title", ""))
@@ -1801,9 +1841,13 @@ func _refresh_storybook() -> void:
 		_book_page_counter_label.text = "—/—"
 		_book_prev_btn.disabled = true
 		_book_next_btn.disabled = true
+		if _book_enter_realm_btn != null:
+			_book_enter_realm_btn.disabled = true
+		if _book_magic_hint_label != null:
+			_book_magic_hint_label.text = "Desbloqueie o capítulo para viajar com Pó de Pirlimpimpim!"
 
 	if _book_status_label != null:
-		_book_status_label.text = "♥ Leitura de hoje registrada (+10 Energia) ✓" if bonus_claimed else "♥ Leia um capítulo para ganhar +10 Energia hoje!"
+		_book_status_label.text = "♥ +10 Energia ✓" if bonus_claimed else "♥ +10 Energia hoje"
 
 
 func _build_menu_modal() -> void:
