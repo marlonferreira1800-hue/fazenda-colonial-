@@ -5,10 +5,12 @@ signal demo_mode_changed(active: bool)
 const CropDataScript := preload("res://scripts/data/crop_data.gd")
 const FarmCatalogScript := preload("res://scripts/data/farm_catalog.gd")
 const SeasonDataScript := preload("res://scripts/data/season_data.gd")
+const VillageDataScript := preload("res://scripts/data/village_data.gd")
+const VillagerScript := preload("res://scripts/world/villager.gd")
 
 const TILE_SIZE: int = 16
-const MAP_WIDTH: int = 40
-const MAP_HEIGHT: int = 24
+const MAP_WIDTH: int = 68
+const MAP_HEIGHT: int = 38
 
 # Atlas coordinates in res://assets/sprites/terrain_tileset.png (4 cols x 2 rows)
 const TILE_GRASS := Vector2i(0, 0)
@@ -26,6 +28,8 @@ const SHIPPING_BIN_TILE := Vector2i(10, 5)
 const SHOP_SIGN_TILE := Vector2i(12, 5)
 const ORDER_BOARD_TILE := Vector2i(13, 5)
 const WELL_TILE := Vector2i(15, 5)
+const VILLAGE_WELL_TILE := Vector2i(48, 13)
+const VENDA_TILE := Vector2i(44, 7)
 const FOUNTAIN_TILE := Vector2i(7, 10)
 const CAPELA_TILE := Vector2i(4, 5)
 const PAIOL_TILE := Vector2i(5, 16)
@@ -41,7 +45,7 @@ const HOUSE_DOOR_TILES: Array[Vector2i] = [
 	Vector2i(7, 5),
 	Vector2i(8, 5),
 ]
-const HOUSE_ORIGIN := Vector2(1200.0, 0.0)
+const HOUSE_ORIGIN := Vector2(2000.0, 0.0)
 const ANIMAL_PEN_BOUNDS := Rect2(456.0, 88.0, 112.0, 64.0)
 
 const FARM_GUIDE_TIPS: Array[String] = [
@@ -49,11 +53,12 @@ const FARM_GUIDE_TIPS: Array[String] = [
 	"Guia Cap.2: Colha cultivos maduros e venda na Caixa de Venda ($).",
 	"Guia Cap.3: Galinhas, vacas, ovelhas e porcos produzem todos os dias.",
 	"Guia Cap.4: Tome um Chá no fogão (+20 Energia) e durma na Cama!",
-	"Guia Cap.5: Pressione P para assistir ao Fazendeiro Automático!",
+	"Guia Cap.5: Explore a Vila de São Sebastião (Leste) e o Vale do Ribeirão (Sul)!",
 ]
 
 const REACH_TILES: int = 2
 const ANIMAL_INTERACT_REACH: float = 28.0
+const VILLAGER_INTERACT_REACH: float = 28.0
 
 # Demo AI navigation waypoints & starter plots
 const DEMO_CORRIDOR_Y: float = 104.0
@@ -131,6 +136,11 @@ var _sprinklers: Dictionary = {}
 # machine_id -> { "body": StaticBody2D, "sprite": Sprite2D, "badge": Sprite2D, "tile": Vector2i }
 var _machines: Dictionary = {}
 var _animals: Array[CharacterBody2D] = []
+var _villagers: Array[CharacterBody2D] = []
+var _house_window_glows: Dictionary = {}
+var _village_road_graph: Dictionary = {}
+var _current_region: String = "fazenda"
+var _social_check_timer: float = 0.0
 
 var _order_badge: Sprite2D = null
 
@@ -166,6 +176,8 @@ var _demo_last_pos: Vector2 = Vector2.ZERO
 
 
 class WeatherFxNode extends Node2D:
+	const WORLD_W: float = 1088.0
+	const WORLD_H: float = 608.0
 	var is_rainy: bool = false
 	var is_winter: bool = false
 	var drops: Array[Dictionary] = []
@@ -176,6 +188,10 @@ class WeatherFxNode extends Node2D:
 		Vector2(548.0, 278.0),
 		Vector2(114.0, 174.0),
 		Vector2(126.0, 174.0),
+		Vector2(544.0, 396.0),
+		Vector2(566.0, 424.0),
+		Vector2(536.0, 514.0),
+		Vector2(574.0, 536.0),
 	]
 	var smoke_puffs: Array[Dictionary] = []
 	var butterflies: Array[Dictionary] = []
@@ -186,9 +202,9 @@ class WeatherFxNode extends Node2D:
 	func _ready() -> void:
 		z_index = 22
 		_rng.seed = 13026
-		for i in range(60):
+		for i in range(115):
 			drops.append({
-				"pos": Vector2(_rng.randf_range(0.0, 640.0), _rng.randf_range(0.0, 384.0)),
+				"pos": Vector2(_rng.randf_range(0.0, WORLD_W), _rng.randf_range(0.0, WORLD_H)),
 				"speed": _rng.randf_range(160.0, 230.0),
 				"len": _rng.randf_range(5.0, 9.0),
 			})
@@ -197,10 +213,14 @@ class WeatherFxNode extends Node2D:
 			Color(0.32, 0.76, 1.0, 0.92),
 			Color(1.0, 0.44, 0.28, 0.92),
 			Color(0.96, 0.94, 0.48, 0.92),
+			Color(1.0, 0.78, 0.34, 0.92),
+			Color(0.42, 0.84, 1.0, 0.92),
+			Color(0.98, 0.54, 0.62, 0.92),
+			Color(0.92, 0.96, 0.44, 0.92),
 		]
 		for i in range(b_colors.size()):
 			butterflies.append({
-				"pos": Vector2(_rng.randf_range(60.0, 560.0), _rng.randf_range(70.0, 310.0)),
+				"pos": Vector2(_rng.randf_range(60.0, WORLD_W - 60.0), _rng.randf_range(70.0, WORLD_H - 70.0)),
 				"vx": _rng.randf_range(10.0, 20.0) * (-1.0 if i % 2 == 0 else 1.0),
 				"phase": _rng.randf_range(0.0, TAU),
 				"color": b_colors[i],
@@ -215,8 +235,8 @@ class WeatherFxNode extends Node2D:
 				var spd: float = float(d["speed"]) * speed_mult
 				var vx: float = (-0.18 * spd + sin(_time_acc * 2.4 + p.y * 0.05) * 14.0) if is_winter else (-0.25 * spd)
 				p += Vector2(vx, spd) * delta
-				if p.y > 384.0 or p.x < -8.0:
-					p = Vector2(_rng.randf_range(0.0, 656.0), _rng.randf_range(-24.0, 0.0))
+				if p.y > WORLD_H or p.x < -8.0:
+					p = Vector2(_rng.randf_range(0.0, WORLD_W + 16.0), _rng.randf_range(-24.0, 0.0))
 				d["pos"] = p
 		elif not is_winter:
 			for b in butterflies:
@@ -225,22 +245,28 @@ class WeatherFxNode extends Node2D:
 				var bph: float = float(b["phase"])
 				bp.x += bvx * delta
 				bp.y += sin(_time_acc * 3.8 + bph) * 11.0 * delta
-				if bp.x > 610.0:
+				if bp.x > WORLD_W - 30.0:
 					bp.x = 30.0
 				elif bp.x < 30.0:
-					bp.x = 610.0
-				bp.y = clampf(bp.y, 60.0, 340.0)
+					bp.x = WORLD_W - 30.0
+				bp.y = clampf(bp.y, 60.0, WORLD_H - 50.0)
 				b["pos"] = bp
 
 		_smoke_timer += delta
 		if _smoke_timer >= 0.65:
 			_smoke_timer = 0.0
-			smoke_puffs.append({
-				"pos": Vector2(135.0 + _rng.randf_range(-1.5, 1.5), 62.0),
-				"life": 0.0,
-				"max_life": 2.1,
-				"vx": _rng.randf_range(-3.0, 5.0),
-			})
+			var chimneys: Array[Vector2] = [
+				Vector2(135.0, 62.0),
+				Vector2(824.0, 74.0),
+				Vector2(982.0, 261.0),
+			]
+			for ch in chimneys:
+				smoke_puffs.append({
+					"pos": Vector2(ch.x + _rng.randf_range(-1.5, 1.5), ch.y),
+					"life": 0.0,
+					"max_life": 2.1,
+					"vx": _rng.randf_range(-3.0, 5.0),
+				})
 
 		for idx in range(smoke_puffs.size() - 1, -1, -1):
 			var puff: Dictionary = smoke_puffs[idx]
@@ -332,6 +358,7 @@ func _ready() -> void:
 	_spawn_colonial_ground_decals()
 	_spawn_buildings_and_props()
 	_spawn_animals()
+	_spawn_villagers()
 	_setup_house_interior()
 
 	if player != null:
@@ -370,6 +397,7 @@ func _ready() -> void:
 	_refresh_machines()
 	_refresh_order_badge()
 	_refresh_tropeiro_presence()
+	_sync_villagers(true)
 	_sync_weather_fx()
 	_update_day_night_tint()
 
@@ -424,6 +452,10 @@ func _process(delta: float) -> void:
 		elif _current_location == "house" and _house_interior != null:
 			if moving_down and bool(_house_interior.call("is_at_exit_threshold", player.global_position)):
 				_exit_house()
+
+	if _current_location == "farm":
+		_update_region_banner()
+		_tick_villager_socializing(delta)
 
 	_update_target_cursor(shop_open or _fishing_active)
 	_update_prompt_label(shop_open or _fishing_active)
@@ -563,6 +595,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		var click_pos: Vector2 = get_global_mouse_position()
+		var clicked_villager: CharacterBody2D = _find_villager_at_click(click_pos)
+		if clicked_villager != null:
+			if player != null and player.global_position.distance_to(clicked_villager.global_position) <= VILLAGER_INTERACT_REACH + 10.0:
+				_interact_with_villager(clicked_villager)
+			else:
+				_show_toast("Aproxime-se mais para conversar!")
+				_play_sfx("play_error")
+			get_viewport().set_input_as_handled()
+			return
+
 		var clicked_animal: CharacterBody2D = _find_animal_at_click(click_pos)
 		if clicked_animal != null:
 			if player != null and player.global_position.distance_to(clicked_animal.global_position) <= ANIMAL_INTERACT_REACH + 4.0:
@@ -773,6 +815,7 @@ func _sync_weather_fx() -> void:
 
 func _on_weather_changed(_weather: String, _tomorrow: String) -> void:
 	_sync_weather_fx()
+	_sync_villagers(false)
 	_update_day_night_tint()
 
 
@@ -784,6 +827,7 @@ func _on_game_reset() -> void:
 	_tea_used_today = false
 	_fountain_drank_today = false
 	_capela_blessed_today = false
+	_current_region = "fazenda"
 	_apply_location_state("farm", Vector2(136.0, 118.0), Vector2i(0, 1))
 	soil_layer.clear()
 	for tile_var in _crops.keys():
@@ -804,6 +848,7 @@ func _on_game_reset() -> void:
 	_sprinklers.clear()
 
 	_spawn_animals()
+	_spawn_villagers()
 	_refresh_machines()
 	_refresh_order_badge()
 	_refresh_tropeiro_presence()
@@ -815,6 +860,7 @@ func _on_game_reset() -> void:
 
 	var reset_season: String = str(_game_state.get("current_season")) if _game_state != null else "spring"
 	_apply_season_visuals(reset_season if not reset_season.is_empty() else "spring")
+	_sync_villagers(true)
 	_sync_weather_fx()
 	_update_day_night_tint()
 
@@ -841,7 +887,8 @@ func _build_farm_map() -> void:
 		ground_layer.set_cell(Vector2i(18, y), 0, TILE_PATH)
 	for y in range(6, 13):
 		ground_layer.set_cell(Vector2i(26, y), 0, TILE_PATH)
-	for x in range(26, 33):
+	# Estrada Leste ligando a Fazenda à Vila de São Sebastião
+	for x in range(26, 64):
 		ground_layer.set_cell(Vector2i(x, 11), 0, TILE_PATH)
 		ground_layer.set_cell(Vector2i(x, 12), 0, TILE_PATH)
 	ground_layer.set_cell(Vector2i(8, 5), 0, TILE_PATH)
@@ -854,17 +901,55 @@ func _build_farm_map() -> void:
 		ground_layer.set_cell(Vector2i(x, 12), 0, TILE_PATH)
 	for y in range(12, 18):
 		ground_layer.set_cell(Vector2i(5, y), 0, TILE_PATH)
-	# Estrada Real (saída sul da lavoura até a porteira)
-	for y in range(17, 24):
+	# Estrada Real (saída sul da lavoura até o Vale do Ribeirão)
+	for y in range(17, 34):
 		ground_layer.set_cell(Vector2i(17, y), 0, TILE_PATH)
 		ground_layer.set_cell(Vector2i(18, y), 0, TILE_PATH)
 
-	# Lake in bottom-right corner
+	# Ruas da Vila de São Sebastião (Leste: x=41..63, y=8..21)
+	for x in range(41, 64):
+		ground_layer.set_cell(Vector2i(x, 8), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(x, 9), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(x, 20), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(x, 21), 0, TILE_PATH)
+	# Largo do Coreto (Praça da Vila)
+	for y in range(9, 16):
+		for x in range(47, 58):
+			ground_layer.set_cell(Vector2i(x, y), 0, TILE_PATH)
+	# Travessas verticais da Vila
+	for y in range(8, 22):
+		ground_layer.set_cell(Vector2i(41, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(42, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(48, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(49, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(56, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(57, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(62, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(63, y), 0, TILE_PATH)
+
+	# Estrada do Vale do Ribeirão (Sul: liga Casa Paroquial, Estrada Real, Casa do Chico, Ponte e Vila)
+	for x in range(9, 51):
+		ground_layer.set_cell(Vector2i(x, 29), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(x, 30), 0, TILE_PATH)
+	for y in range(21, 31):
+		ground_layer.set_cell(Vector2i(48, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(49, y), 0, TILE_PATH)
+
+	# Lake in farm bottom-right corner
 	for y in range(14, 20):
 		for x in range(29, 36):
 			var is_corner: bool = (y == 14 or y == 19) and (x == 29 or x == 35)
 			if not is_corner:
 				ground_layer.set_cell(Vector2i(x, y), 0, TILE_WATER)
+
+	# Ribeirão Colonial fluindo do lago para o Vale Sul (com ponte caminhável em y=29..30)
+	for y in range(20, 36):
+		if y == 29 or y == 30:
+			continue
+		var rx_start: int = 32 if y < 24 else 33
+		var rx_end: int = 35 if y < 24 else 38
+		for x in range(rx_start, rx_end):
+			ground_layer.set_cell(Vector2i(x, y), 0, TILE_WATER)
 
 	# Fenced border around the 12x7 arable garden (x=11..24, y=8..16) with 2-tile gates
 	for x in range(11, 25):
@@ -896,7 +981,7 @@ func _build_farm_map() -> void:
 
 
 func _spawn_colonial_ground_decals() -> void:
-	# Calçamento pé-de-moleque no pátio da Casa-Grande, Capela e Chafariz
+	# Calçamento pé-de-moleque no pátio da Casa-Grande, Capela, Chafariz e Praça da Vila
 	var cobble_tex := _load_texture_safe("res://assets/sprites/colonial_buildings_px/pe_de_moleque.png")
 	if cobble_tex != null:
 		for gy in [6, 8, 10]:
@@ -909,6 +994,17 @@ func _spawn_colonial_ground_decals() -> void:
 				spr.z_index = -2
 				add_child(spr)
 				_exterior_props.append(spr)
+		# Praça do Coreto na Vila de São Sebastião
+		for gy in [9, 11, 13]:
+			for gx in [48, 50, 52, 54]:
+				var v_spr := Sprite2D.new()
+				v_spr.name = "PracaVilaCobble_%d_%d" % [gx, gy]
+				v_spr.texture = cobble_tex
+				v_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+				v_spr.position = Vector2((gx + 1) * TILE_SIZE, (gy + 1) * TILE_SIZE)
+				v_spr.z_index = -2
+				add_child(v_spr)
+				_exterior_props.append(v_spr)
 
 	# Terreiro de secagem de café e tabaco ao lado do Paiol
 	var terreiro_tex := _load_texture_safe("res://assets/sprites/colonial_buildings_px/terreiro_secagem.png")
@@ -921,6 +1017,18 @@ func _spawn_colonial_ground_decals() -> void:
 		t_spr.z_index = -2
 		add_child(t_spr)
 		_exterior_props.append(t_spr)
+
+	# Ponte colonial de madeira sobre o Ribeirão no Vale Sul
+	var ponte_tex := _load_texture_safe("res://assets/sprites/colonial_buildings_px/ponte_madeira.png")
+	if ponte_tex != null:
+		var b_spr := Sprite2D.new()
+		b_spr.name = "PonteRibeirao"
+		b_spr.texture = ponte_tex
+		b_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		b_spr.position = Vector2(35.5 * TILE_SIZE, 30.0 * TILE_SIZE)
+		b_spr.z_index = -1
+		add_child(b_spr)
+		_exterior_props.append(b_spr)
 
 
 func _spawn_buildings_and_props() -> void:
@@ -1075,12 +1183,18 @@ func _spawn_buildings_and_props() -> void:
 		t_badge.z_index = 8
 		_tropeiro_body.add_child(t_badge)
 
-	# Palmeiras Imperiais (símbolo das sedes de fazendas coloniais)
+	# Palmeiras Imperiais (símbolo das sedes de fazendas e praças coloniais)
 	var palm_positions: Array[Vector2] = [
 		Vector2(6.0 * TILE_SIZE + 4.0, 7.5 * TILE_SIZE),
 		Vector2(10.0 * TILE_SIZE + 4.0, 7.5 * TILE_SIZE),
 		Vector2(16.0 * TILE_SIZE + 4.0, 21.5 * TILE_SIZE),
 		Vector2(19.5 * TILE_SIZE + 4.0, 21.5 * TILE_SIZE),
+		Vector2(47.2 * TILE_SIZE, 10.2 * TILE_SIZE),
+		Vector2(57.2 * TILE_SIZE, 10.2 * TILE_SIZE),
+		Vector2(47.2 * TILE_SIZE, 15.6 * TILE_SIZE),
+		Vector2(57.2 * TILE_SIZE, 15.6 * TILE_SIZE),
+		Vector2(15.8 * TILE_SIZE, 28.4 * TILE_SIZE),
+		Vector2(19.8 * TILE_SIZE, 28.4 * TILE_SIZE),
 	]
 	for idx in range(palm_positions.size()):
 		_spawn_colonial_building(
@@ -1091,24 +1205,83 @@ func _spawn_buildings_and_props() -> void:
 			Rect2(0.0, -3.0, 10.0, 8.0)
 		)
 
-	# Lampiões a óleo coloniais (acendem ao entardecer/noite)
+	# Casas e edificações da Vila de São Sebastião e do Vale do Ribeirão
+	_house_window_glows.clear()
+	for b_def in VillageDataScript.get_village_buildings():
+		var b_tile: Vector2 = b_def["tile"]
+		var b_body := _spawn_colonial_building(
+			str(b_def["name"]),
+			str(b_def["tex"]),
+			Vector2(b_tile.x * TILE_SIZE, b_tile.y * TILE_SIZE),
+			b_def["offset"] as Vector2,
+			b_def["collider"] as Rect2
+		)
+		var owner_id: String = str(b_def.get("owner_id", ""))
+		if b_body != null and not owner_id.is_empty():
+			var w_glow := _create_window_glow(b_def.get("window_pos", Vector2(0.0, -14.0)) as Vector2)
+			b_body.add_child(w_glow)
+			_house_window_glows[owner_id] = w_glow
+
+	# Poço Colonial da Praça da Vila
+	_spawn_colonial_building(
+		"VillageWell",
+		"res://assets/sprites/colonial_buildings_px/poco_colonial.png",
+		Vector2(VILLAGE_WELL_TILE.x * TILE_SIZE + 8.0, VILLAGE_WELL_TILE.y * TILE_SIZE + 13.0),
+		Vector2(0.0, -10.0),
+		Rect2(0.0, -4.0, 18.0, 12.0)
+	)
+
+	# Placas coloniais de direção (Fazenda <-> Vila / Vale)
+	var sign_positions: Array[Vector2] = [
+		Vector2(38.0 * TILE_SIZE, 10.4 * TILE_SIZE),
+		Vector2(16.2 * TILE_SIZE, 28.2 * TILE_SIZE),
+		Vector2(47.2 * TILE_SIZE, 28.2 * TILE_SIZE),
+	]
+	for idx in range(sign_positions.size()):
+		_spawn_colonial_building(
+			"PlacaDirecao_%d" % idx,
+			"res://assets/sprites/colonial_buildings_px/placa_direcao.png",
+			sign_positions[idx],
+			Vector2(0.0, -10.0),
+			Rect2(0.0, -3.0, 10.0, 8.0)
+		)
+
+	# Lampiões a óleo coloniais (Fazenda, Praça da Vila e Vale do Ribeirão)
 	var lamp_positions: Array[Vector2] = [
 		Vector2(9.5 * TILE_SIZE, 5.5 * TILE_SIZE),
 		Vector2(5.5 * TILE_SIZE, 5.5 * TILE_SIZE),
 		Vector2(9.2 * TILE_SIZE, 10.2 * TILE_SIZE),
 		Vector2(16.2 * TILE_SIZE, 19.5 * TILE_SIZE),
+		Vector2(40.5 * TILE_SIZE, 10.5 * TILE_SIZE),
+		Vector2(47.5 * TILE_SIZE, 8.2 * TILE_SIZE),
+		Vector2(57.5 * TILE_SIZE, 8.2 * TILE_SIZE),
+		Vector2(47.5 * TILE_SIZE, 19.2 * TILE_SIZE),
+		Vector2(57.5 * TILE_SIZE, 19.2 * TILE_SIZE),
+		Vector2(31.5 * TILE_SIZE, 28.5 * TILE_SIZE),
+		Vector2(39.5 * TILE_SIZE, 28.5 * TILE_SIZE),
+		Vector2(13.5 * TILE_SIZE, 28.5 * TILE_SIZE),
 	]
 	for idx in range(lamp_positions.size()):
 		_spawn_colonial_lamp("Lampiao_%d" % idx, lamp_positions[idx])
 
-	# Perimeter trees (32x32)
+	# Perimeter and scenic grove trees (32x32) across the expanded 68x38 territory
 	var tree_positions: Array[Vector2i] = [
+		# Borda norte
 		Vector2i(2, 2), Vector2i(5, 2), Vector2i(18, 2), Vector2i(22, 2),
-		Vector2i(25, 2), Vector2i(37, 2),
-		Vector2i(2, 6), Vector2i(2, 11), Vector2i(2, 16), Vector2i(3, 20),
-		Vector2i(7, 21), Vector2i(12, 21), Vector2i(24, 21),
-		Vector2i(37, 8), Vector2i(37, 13), Vector2i(37, 19),
-		Vector2i(3, 14), Vector2i(26, 17),
+		Vector2i(25, 2), Vector2i(39, 2), Vector2i(47, 2), Vector2i(56, 2),
+		Vector2i(64, 2),
+		# Borda oeste
+		Vector2i(2, 6), Vector2i(2, 11), Vector2i(2, 16), Vector2i(2, 22),
+		Vector2i(2, 28), Vector2i(2, 34), Vector2i(3, 14),
+		# Borda leste (atrás da Vila)
+		Vector2i(65, 6), Vector2i(65, 13), Vector2i(65, 20), Vector2i(65, 27),
+		Vector2i(65, 34),
+		# Borda sul (Vale do Ribeirão e pomar)
+		Vector2i(6, 35), Vector2i(12, 35), Vector2i(22, 35), Vector2i(28, 35),
+		Vector2i(42, 35), Vector2i(52, 35), Vector2i(60, 35),
+		# Bosques decorativos internos (sem bloquear estradas)
+		Vector2i(6, 24), Vector2i(13, 24), Vector2i(26, 17), Vector2i(28, 24),
+		Vector2i(43, 25), Vector2i(55, 25), Vector2i(60, 26), Vector2i(58, 32),
 	]
 	for tp in tree_positions:
 		_spawn_prop_sprite(
@@ -1123,6 +1296,8 @@ func _spawn_buildings_and_props() -> void:
 	var rock_tiles: Array[Vector2i] = [
 		Vector2i(2, 8), Vector2i(4, 10), Vector2i(8, 17),
 		Vector2i(22, 5), Vector2i(28, 20), Vector2i(36, 16),
+		Vector2i(31, 25), Vector2i(39, 25), Vector2i(45, 33),
+		Vector2i(63, 15), Vector2i(14, 33),
 	]
 	for rt in rock_tiles:
 		_spawn_prop_sprite(
@@ -1137,7 +1312,10 @@ func _spawn_buildings_and_props() -> void:
 	var bush_tiles: Array[Vector2i] = [
 		Vector2i(6, 5), Vector2i(9, 4), Vector2i(14, 4),
 		Vector2i(9, 13), Vector2i(9, 18), Vector2i(15, 19),
-		Vector2i(22, 18), Vector2i(27, 14), Vector2i(35, 12),
+		Vector2i(22, 18), Vector2i(27, 14), Vector2i(35, 13),
+		Vector2i(43, 15), Vector2i(59, 14), Vector2i(64, 9),
+		Vector2i(8, 32), Vector2i(21, 32), Vector2i(45, 26),
+		Vector2i(54, 28), Vector2i(62, 24),
 	]
 	for bt in bush_tiles:
 		_spawn_prop_sprite(
@@ -1253,6 +1431,209 @@ func _spawn_colonial_lamp(prop_name: String, world_pos: Vector2) -> StaticBody2D
 	body.add_child(glow)
 	_lamp_glows.append(glow)
 	return body
+
+
+func _create_window_glow(pos: Vector2) -> Sprite2D:
+	var glow := Sprite2D.new()
+	var grad := GradientTexture2D.new()
+	grad.fill = GradientTexture2D.FILL_RADIAL
+	grad.fill_from = Vector2(0.5, 0.5)
+	grad.fill_to = Vector2(0.5, 0.0)
+	grad.width = 44
+	grad.height = 36
+	var g := Gradient.new()
+	g.colors = PackedColorArray([Color(1.0, 0.80, 0.38, 0.52), Color(1.0, 0.60, 0.18, 0.0)])
+	grad.gradient = g
+	glow.texture = grad
+	glow.position = pos
+	glow.z_index = 11
+	var mat := CanvasItemMaterial.new()
+	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	glow.material = mat
+	glow.visible = false
+	return glow
+
+
+func _spawn_villagers() -> void:
+	for v in _villagers:
+		if is_instance_valid(v):
+			v.queue_free()
+	_villagers.clear()
+
+	_village_road_graph = VillageDataScript.get_road_graph(TILE_SIZE)
+	var specs: Array[Dictionary] = VillageDataScript.get_villager_specs(TILE_SIZE)
+	for spec in specs:
+		var v_node := VillagerScript.new() as CharacterBody2D
+		if v_node == null:
+			continue
+		v_node.name = "Villager_%s" % str(spec.get("id", "npc"))
+		add_child(v_node)
+		if v_node.has_method("setup"):
+			v_node.call("setup", spec, _village_road_graph)
+		if v_node.has_signal("indoors_changed"):
+			v_node.indoors_changed.connect(_on_villager_indoors_changed)
+		_villagers.append(v_node)
+
+
+func _sync_villagers(instant: bool = false) -> void:
+	var mins: float = float(_game_state.get("time_minutes")) if _game_state != null else 360.0
+	var is_rain: bool = _game_state != null and str(_game_state.get("weather")) == "rainy"
+	for v in _villagers:
+		if is_instance_valid(v) and v.has_method("sync_to_time"):
+			v.call("sync_to_time", mins, is_rain, instant)
+	_refresh_window_glows()
+
+
+func _on_villager_indoors_changed(_npc_id: String, _inside: bool) -> void:
+	_refresh_window_glows()
+
+
+func _refresh_window_glows() -> void:
+	if _house_window_glows.is_empty():
+		return
+	var mins: float = float(_game_state.get("time_minutes")) if _game_state != null else 360.0
+	var is_evening_or_night: bool = (mins >= 1020.0 or mins < 420.0)
+	var indoors_by_id: Dictionary = {}
+	for v in _villagers:
+		if is_instance_valid(v):
+			indoors_by_id[str(v.get("npc_id"))] = bool(v.get("is_indoors"))
+	for owner_id in _house_window_glows.keys():
+		var glow_val: Variant = _house_window_glows[owner_id]
+		if is_instance_valid(glow_val) and glow_val is Sprite2D:
+			var is_in: bool = bool(indoors_by_id.get(owner_id, false))
+			var show_glow: bool = (_current_location == "farm") and (is_evening_or_night or is_in)
+			var g_spr := glow_val as Sprite2D
+			g_spr.visible = show_glow
+			g_spr.modulate.a = 0.95 if (is_in and is_evening_or_night) else (0.55 if is_evening_or_night else 0.35)
+
+
+func _find_nearby_villager(world_pos: Vector2, max_dist: float) -> CharacterBody2D:
+	var best: CharacterBody2D = null
+	var best_dist: float = max_dist
+	for v in _villagers:
+		if not is_instance_valid(v) or not v.visible or bool(v.get("is_indoors")):
+			continue
+		var d: float = world_pos.distance_to(v.global_position)
+		if d <= best_dist:
+			best_dist = d
+			best = v
+	return best
+
+
+func _find_villager_at_click(click_pos: Vector2) -> CharacterBody2D:
+	var best: CharacterBody2D = null
+	var best_dist: float = 16.0
+	for v in _villagers:
+		if not is_instance_valid(v) or not v.visible or bool(v.get("is_indoors")):
+			continue
+		var d: float = click_pos.distance_to(v.global_position + Vector2(0.0, -4.0))
+		if d <= best_dist:
+			best_dist = d
+			best = v
+	return best
+
+
+func _interact_with_villager(villager: CharacterBody2D) -> void:
+	if villager == null or not is_instance_valid(villager) or player == null:
+		return
+	var mins: float = float(_game_state.get("time_minutes")) if _game_state != null else 480.0
+	var is_rain: bool = _game_state != null and str(_game_state.get("weather")) == "rainy"
+	var res: Dictionary = villager.call("interact", player.global_position, mins, is_rain, _current_season_id)
+	var v_id: String = str(res.get("npc_id", ""))
+	var v_name: String = str(res.get("npc_name", "Morador"))
+	var line: String = str(res.get("line", ""))
+	var hearts: int = int(res.get("hearts", 0))
+	var gained: bool = bool(res.get("gained_heart", false))
+
+	_play_sfx("play_click")
+	if gained:
+		_spawn_particles(villager.global_position + Vector2(0.0, -8.0), Color(1.0, 0.48, 0.58))
+		_spawn_floating_text(villager.global_position + Vector2(0.0, -18.0), "+1 ♥ Amizade", Color(1.0, 0.55, 0.65))
+
+	# Benefícios diários únicos de cada morador da vila
+	var perk_used: bool = bool(villager.get("perk_used_today"))
+	if not perk_used and _game_state != null:
+		if v_id == "quiteria":
+			villager.set("perk_used_today", true)
+			var cur_s: int = int(_game_state.get("stamina"))
+			var max_s: int = int(_game_state.get("max_stamina"))
+			var new_s: int = mini(max_s, cur_s + 15)
+			_game_state.set("stamina", new_s)
+			if _game_state.has_signal("stamina_changed"):
+				_game_state.stamina_changed.emit(new_s, max_s)
+			_spawn_floating_text(player.global_position + Vector2(0.0, -16.0), "+15 Energia (Chá)", Color(0.55, 0.96, 0.65))
+			_show_toast("%s: \"%s\" (+15 Energia do Chá de Ervas!)" % [v_name, line])
+			return
+		elif v_id == "sinha" and hearts >= 2:
+			villager.set("perk_used_today", true)
+			var cur_s2: int = int(_game_state.get("stamina"))
+			var max_s2: int = int(_game_state.get("max_stamina"))
+			var new_s2: int = mini(max_s2, cur_s2 + 8)
+			_game_state.set("stamina", new_s2)
+			if _game_state.has_signal("stamina_changed"):
+				_game_state.stamina_changed.emit(new_s2, max_s2)
+			_spawn_floating_text(player.global_position + Vector2(0.0, -16.0), "+8 Energia (Doce)", Color(1.0, 0.85, 0.45))
+			_show_toast("%s: \"%s\" (+8 Energia do doce caseiro!)" % [v_name, line])
+			return
+		elif v_id == "tiao" and hearts >= 3:
+			villager.set("perk_used_today", true)
+			if _game_state.has_method("add_fish"):
+				_game_state.call("add_fish", "tilapia", 1, false)
+			_spawn_floating_text(player.global_position + Vector2(0.0, -16.0), "+1 Tilápia Fresca", Color(0.55, 0.88, 1.0))
+			_show_toast("%s: \"%s\" (Presenteou +1 Tilápia fresca!)" % [v_name, line])
+			return
+
+	_show_toast("%s: \"%s\"" % [v_name, line])
+
+
+func _update_region_banner() -> void:
+	if player == null:
+		return
+	var tile: Vector2i = _world_to_tile(player.global_position)
+	var next_region: String = "fazenda"
+	if tile.x >= 40 and tile.y <= 23:
+		next_region = "vila"
+	elif tile.y >= 24:
+		next_region = "vale"
+	if next_region != _current_region:
+		_current_region = next_region
+		match next_region:
+			"vila":
+				_show_toast("Vila de São Sebastião — Praça do Coreto, Venda, Ferraria e Botica")
+			"vale":
+				_show_toast("Vale do Ribeirão — Casa Paroquial, Ponte de Madeira e Estrada Real")
+			_:
+				_show_toast("Fazenda Colonial — Sede e Lavoura")
+
+
+func _tick_villager_socializing(delta: float) -> void:
+	_social_check_timer -= delta
+	if _social_check_timer > 0.0:
+		return
+	_social_check_timer = 9.5
+	var greetings: Array[String] = [
+		"Ô compadre!",
+		"Tudo em paz?",
+		"Belo dia na vila!",
+		"Como vai a lida?",
+		"Saúde e fartura!",
+	]
+	for i in range(_villagers.size()):
+		var va: CharacterBody2D = _villagers[i]
+		if not is_instance_valid(va) or bool(va.get("is_indoors")):
+			continue
+		for j in range(i + 1, _villagers.size()):
+			var vb: CharacterBody2D = _villagers[j]
+			if not is_instance_valid(vb) or bool(vb.get("is_indoors")):
+				continue
+			if va.global_position.distance_to(vb.global_position) <= 28.0 and _rng.randf() < 0.35:
+				if va.has_method("show_bubble"):
+					va.call("show_bubble", greetings[_rng.randi() % greetings.size()], 2.4)
+				if va.has_method("face_toward"):
+					va.call("face_toward", vb.global_position)
+				if vb.has_method("face_toward"):
+					vb.call("face_toward", va.global_position)
+				return
 
 
 func _refresh_tropeiro_presence() -> void:
@@ -1425,6 +1806,12 @@ func _handle_interact() -> void:
 
 	var p_pos: Vector2 = player.global_position
 
+	# Check nearby villager first so conversing with NPCs feels immediate
+	var nearby_villager: CharacterBody2D = _find_nearby_villager(p_pos, VILLAGER_INTERACT_REACH)
+	if nearby_villager != null:
+		_interact_with_villager(nearby_villager)
+		return
+
 	# Check proximity to Shipping Bin
 	if p_pos.distance_to(_tile_center(SHIPPING_BIN_TILE)) <= 28.0:
 		_sell_at_shipping_bin()
@@ -1435,10 +1822,15 @@ func _handle_interact() -> void:
 		_enter_house()
 		return
 
-	# Check proximity to Shop Sign
-	if p_pos.distance_to(_tile_center(SHOP_SIGN_TILE)) <= 28.0:
+	# Check proximity to Shop Sign or Venda Secos & Molhados in the Village
+	if p_pos.distance_to(_tile_center(SHOP_SIGN_TILE)) <= 28.0 or p_pos.distance_to(_tile_center(VENDA_TILE)) <= 32.0:
 		if hud != null and hud.has_method("toggle_shop"):
 			hud.call("toggle_shop")
+		return
+
+	# Check proximity to Poço da Vila
+	if p_pos.distance_to(_tile_center(VILLAGE_WELL_TILE)) <= 30.0:
+		_refill_watering_can()
 		return
 
 	# Check proximity to Order Board
@@ -2191,11 +2583,17 @@ func _on_day_advanced(_new_day: int) -> void:
 		if is_instance_valid(animal) and animal.has_method("reset_daily"):
 			animal.call("reset_daily")
 
+	for villager in _villagers:
+		if is_instance_valid(villager) and villager.has_method("reset_daily"):
+			villager.call("reset_daily")
+
+	_sync_villagers(true)
 	_sync_weather_fx()
 	_update_day_night_tint()
 
 
 func _on_day_changed(_day: int, _time_minutes: float) -> void:
+	_sync_villagers(false)
 	_update_day_night_tint()
 
 
@@ -2351,6 +2749,11 @@ func export_world_state() -> Dictionary:
 		else:
 			animals_collected.append(false)
 
+	var villagers_arr: Array = []
+	for villager in _villagers:
+		if is_instance_valid(villager) and villager.has_method("export_state"):
+			villagers_arr.append(villager.call("export_state"))
+
 	var p_pos := Vector2(136.0, 118.0)
 	if player != null:
 		p_pos = player.global_position
@@ -2363,6 +2766,7 @@ func export_world_state() -> Dictionary:
 		"sprinklers": sprinklers_arr,
 		"animals": animals_arr,
 		"animals_collected": animals_collected,
+		"villagers": villagers_arr,
 		"location": _current_location,
 		"player_pos": [p_pos.x, p_pos.y],
 		"tea_used_today": _tea_used_today,
@@ -2471,6 +2875,19 @@ func _restore_world_state(data: Dictionary) -> void:
 					else:
 						animal.set("collected_today", val)
 
+	var villagers_data: Variant = data.get("villagers", [])
+	if villagers_data is Array:
+		var by_id: Dictionary = {}
+		for entry in (villagers_data as Array):
+			if entry is Dictionary:
+				var ed := entry as Dictionary
+				by_id[str(ed.get("id", ""))] = ed
+		for v in _villagers:
+			if is_instance_valid(v) and v.has_method("restore_state"):
+				var vid: String = str(v.get("npc_id"))
+				if by_id.has(vid):
+					v.call("restore_state", by_id[vid])
+
 	_tea_used_today = bool(data.get("tea_used_today", false))
 	_fountain_drank_today = bool(data.get("fountain_drank_today", false))
 	_capela_blessed_today = bool(data.get("capela_blessed_today", false))
@@ -2488,6 +2905,7 @@ func _restore_world_state(data: Dictionary) -> void:
 		_apply_location_state("house", target_pos, Vector2i(0, -1))
 	else:
 		_apply_location_state("farm", target_pos, Vector2i(0, 1))
+	_sync_villagers(true)
 
 
 func _update_day_night_tint() -> void:
@@ -2535,6 +2953,7 @@ func _update_day_night_tint() -> void:
 		if is_instance_valid(glow):
 			glow.visible = want_lamps
 			glow.modulate.a = lamp_alpha
+	_refresh_window_glows()
 
 
 func _update_target_cursor(shop_open: bool) -> void:
@@ -2612,10 +3031,18 @@ func _update_prompt_label(shop_open: bool) -> void:
 			_prompt_label.global_position = anchor - Vector2(_prompt_label.size.x * 0.5, 0.0)
 		return
 
+	var nearby_villager: CharacterBody2D = _find_nearby_villager(p_pos, VILLAGER_INTERACT_REACH)
 	var nearby_animal: CharacterBody2D = _find_nearby_animal(p_pos, ANIMAL_INTERACT_REACH)
 	var nearby_machine: String = _find_nearby_machine(p_pos)
 
-	if p_pos.distance_to(HOUSE_DOOR_POS) <= 28.0:
+	if nearby_villager != null:
+		var v_name: String = str(nearby_villager.get("npc_name"))
+		var v_role: String = str(nearby_villager.get("role"))
+		var h_txt: String = str(nearby_villager.call("get_hearts_text")) if nearby_villager.has_method("get_hearts_text") else ""
+		var suffix: String = (" " + h_txt) if not h_txt.is_empty() else ""
+		hint = "[F] %s (%s)%s" % [v_name, v_role, suffix]
+		anchor = nearby_villager.global_position + Vector2(0.0, -24.0)
+	elif p_pos.distance_to(HOUSE_DOOR_POS) <= 28.0:
 		hint = "[F] Entrar na Casa"
 		anchor = HOUSE_DOOR_POS + Vector2(0.0, -24.0)
 	elif p_pos.distance_to(_tile_center(SHIPPING_BIN_TILE)) <= 28.0:
@@ -2624,6 +3051,12 @@ func _update_prompt_label(shop_open: bool) -> void:
 	elif p_pos.distance_to(_tile_center(SHOP_SIGN_TILE)) <= 28.0:
 		hint = "[F] Loja"
 		anchor = _tile_center(SHOP_SIGN_TILE) + Vector2(0.0, -20.0)
+	elif p_pos.distance_to(_tile_center(VENDA_TILE)) <= 32.0:
+		hint = "[F] Venda Secos & Molhados"
+		anchor = _tile_center(VENDA_TILE) + Vector2(0.0, -26.0)
+	elif p_pos.distance_to(_tile_center(VILLAGE_WELL_TILE)) <= 30.0:
+		hint = "[F] Poço da Vila (Encher Água)"
+		anchor = _tile_center(VILLAGE_WELL_TILE) + Vector2(0.0, -22.0)
 	elif p_pos.distance_to(_tile_center(ORDER_BOARD_TILE)) <= 28.0:
 		hint = "[F] Encomendas"
 		anchor = _tile_center(ORDER_BOARD_TILE) + Vector2(0.0, -20.0)
@@ -2728,9 +3161,13 @@ func _is_tile_in_reach(tile: Vector2i) -> bool:
 
 
 func _is_near_water_source(world_pos: Vector2, target_tile: Vector2i) -> bool:
-	if world_pos.distance_to(_tile_center(WELL_TILE)) <= 30.0 or world_pos.distance_to(_tile_center(FOUNTAIN_TILE)) <= 32.0:
+	if (
+		world_pos.distance_to(_tile_center(WELL_TILE)) <= 30.0
+		or world_pos.distance_to(_tile_center(VILLAGE_WELL_TILE)) <= 30.0
+		or world_pos.distance_to(_tile_center(FOUNTAIN_TILE)) <= 32.0
+	):
 		return true
-	if target_tile == WELL_TILE or target_tile == FOUNTAIN_TILE:
+	if target_tile == WELL_TILE or target_tile == VILLAGE_WELL_TILE or target_tile == FOUNTAIN_TILE:
 		return true
 	var player_tile: Vector2i = _world_to_tile(world_pos)
 	for dy in range(-1, 2):
@@ -2883,6 +3320,11 @@ func _set_exterior_active(active: bool) -> void:
 		if is_instance_valid(animal):
 			animal.visible = active
 			animal.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
+
+	for villager in _villagers:
+		if is_instance_valid(villager):
+			villager.visible = active
+			villager.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
 
 	if _house_interior != null and is_instance_valid(_house_interior):
 		_house_interior.visible = not active
