@@ -115,6 +115,8 @@ var _door_cooldown: float = 0.0
 var _tea_used_today: bool = false
 var _fountain_drank_today: bool = false
 var _lamp_glows: Array[Sprite2D] = []
+var _tropeiro_body: StaticBody2D = null
+var _tropeiro_present: bool = false
 var _guide_tip_index: int = 0
 var _entered_house_once: bool = false
 var _rng := RandomNumberGenerator.new()
@@ -757,6 +759,7 @@ func _on_game_reset() -> void:
 	_spawn_animals()
 	_refresh_machines()
 	_refresh_order_badge()
+	_refresh_tropeiro_presence()
 
 	if player != null:
 		player.global_position = Vector2(136.0, 118.0)
@@ -1203,6 +1206,16 @@ func _spawn_colonial_lamp(prop_name: String, world_pos: Vector2) -> StaticBody2D
 	body.add_child(glow)
 	_lamp_glows.append(glow)
 	return body
+
+
+func _refresh_tropeiro_presence() -> void:
+	var day_num: int = int(_game_state.get("day")) if _game_state != null else 1
+	_tropeiro_present = (day_num % 3 == 1)
+	if _tropeiro_body != null and is_instance_valid(_tropeiro_body):
+		_tropeiro_body.visible = (_current_location == "farm") and _tropeiro_present
+		for child in _tropeiro_body.get_children():
+			if child is CollisionShape2D:
+				(child as CollisionShape2D).disabled = not _tropeiro_present
 
 
 func _spawn_animals() -> void:
@@ -2559,6 +2572,12 @@ func _update_prompt_label(shop_open: bool) -> void:
 	elif p_pos.distance_to(_tile_center(CAPELA_TILE)) <= 34.0:
 		hint = "[F] Orar na Capela"
 		anchor = _tile_center(CAPELA_TILE) + Vector2(0.0, -28.0)
+	elif _tropeiro_present and p_pos.distance_to(_tile_center(TROPEIRO_TILE)) <= 34.0:
+		hint = "[F] Vender ao Tropeiro (+25%)"
+		anchor = _tile_center(TROPEIRO_TILE) + Vector2(0.0, -24.0)
+	elif p_pos.distance_to(_tile_center(CASA_FARINHA_TILE)) <= 36.0:
+		hint = "[F] Fazer Farinha (2 Mandioca)"
+		anchor = _tile_center(CASA_FARINHA_TILE) + Vector2(0.0, -24.0)
 	elif p_pos.distance_to(_tile_center(PAIOL_TILE)) <= 34.0:
 		hint = "[F] Ver Paiol"
 		anchor = _tile_center(PAIOL_TILE) + Vector2(0.0, -24.0)

@@ -54,7 +54,11 @@ jobs:
         run: |
           mkdir -p build/web
           /tmp/godot/godot --headless --path . --import || true
-          /tmp/godot/godot --headless --verbose --path . --export-release "Web" build/web/index.html
+          /tmp/godot/godot --headless --verbose --path . --export-release "Web" build/web/index.html 2>&1 | tee /tmp/godot_export.log
+          if grep -E "SCRIPT ERROR:|Failed to load script" /tmp/godot_export.log; then
+            echo "GDScript parse/load error detected! Aborting deploy."
+            exit 1
+          fi
           touch build/web/.nojekyll
           ls -lh build/web
 
