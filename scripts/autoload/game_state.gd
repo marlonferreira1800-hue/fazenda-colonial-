@@ -135,6 +135,8 @@ var artisan: Dictionary = {
 	"bread": 0,
 	"honey": 0,
 	"farinha_mandioca": 0,
+	"rolo_fumo": 0,
+	"saca_cafe": 0,
 }
 var supplies: Dictionary = {
 	"fertilizer": 2,
@@ -576,7 +578,19 @@ func _compute_category_value(counts: Dictionary, defs: Dictionary, is_crop: bool
 	return total
 
 
-func sell_all_harvested() -> int:
+func get_tropeiro_featured_item() -> Dictionary:
+	var pool: Array[String] = ["bread", "farinha_mandioca", "rolo_fumo", "saca_cafe", "cheese"]
+	var visit_idx: int = maxi(0, (day - 1) / 3)
+	var item_id: String = pool[visit_idx % pool.size()]
+	var info: Dictionary = ARTISAN.get(item_id, {})
+	return {
+		"id": item_id,
+		"name": str(info.get("name", item_id)),
+		"sell_price": int(info.get("sell_price", 80)),
+	}
+
+
+func sell_all_harvested(bonus_mult: float = 1.0, source_label: String = "", featured_id: String = "", featured_mult: float = 1.5) -> int:
 	var total_items: int = get_total_basket_count()
 	var audio := _get_audio()
 	if total_items <= 0:
@@ -585,7 +599,14 @@ func sell_all_harvested() -> int:
 		emit_toast("Cesta vazia! Nada para vender.")
 		return 0
 
-	var total_profit: int = get_total_basket_value()
+	var base_profit: int = get_total_basket_value()
+	var total_profit: int = roundi(float(base_profit) * maxf(1.0, bonus_mult))
+	var featured_bonus: int = 0
+	if not featured_id.is_empty() and ARTISAN.has(featured_id):
+		var feat_qty: int = int(artisan.get(featured_id, 0))
+		if feat_qty > 0 and featured_mult > bonus_mult:
+			featured_bonus = roundi(float(feat_qty * int(ARTISAN[featured_id]["sell_price"])) * (featured_mult - bonus_mult))
+			total_profit += featured_bonus
 	for k in harvested.keys():
 		harvested[k] = 0
 	for k in animal_products.keys():
@@ -602,10 +623,44 @@ func sell_all_harvested() -> int:
 	orders_changed.emit()
 	if audio != null and audio.has_method("play_coin"):
 		audio.play_coin()
-	emit_toast("Vendeu %d item(ns) por +$%d!" % [total_items, total_profit])
+	if source_label.is_empty():
+		emit_toast("Vendeu %d item(ns) por +Rs %d!" % [total_items, total_profit])
+	elif featured_bonus > 0:
+		emit_toast("%s comprou %d item(ns) por +Rs %d (inclui Pedido da Corte +50%%)!" % [source_label, total_items, total_profit])
+	else:
+		emit_toast("%s comprou %d item(ns) por +Rs %d!" % [source_label, total_items, total_profit])
 	if auto_save_enabled:
 		save_game(false)
 	return total_profit
+
+
+func process_casa_farinha() -> String:
+	var mandioca_qty: int = int(harvested.get("carrot", 0))
+	if mandioca_qty < 2:
+		return "no_input"
+	harvested["carrot"] = mandioca_qty - 2
+	add_artisan("farinha_mandioca", 1, false)
+	if auto_save_enabled:
+		save_game(false)
+	return "ok"
+
+
+func process_terreiro_secagem() -> String:
+	var tabaco_qty: int = int(harvested.get("strawberry", 0))
+	if tabaco_qty >= 2:
+		harvested["strawberry"] = tabaco_qty - 2
+		add_artisan("rolo_fumo", 1, false)
+		if auto_save_enabled:
+			save_game(false)
+		return "rolo_fumo"
+	var cafe_qty: int = int(harvested.get("turnip", 0))
+	if cafe_qty >= 2:
+		harvested["turnip"] = cafe_qty - 2
+		add_artisan("saca_cafe", 1, false)
+		if auto_save_enabled:
+			save_game(false)
+		return "saca_cafe"
+	return "no_input"
 
 
 func start_machine(machine_id: String) -> String:
@@ -1209,6 +1264,8 @@ func reset_save() -> void:
 		"bread": 0,
 		"honey": 0,
 		"farinha_mandioca": 0,
+		"rolo_fumo": 0,
+		"saca_cafe": 0,
 	}
 	supplies = {
 		"fertilizer": 2,

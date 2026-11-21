@@ -118,9 +118,25 @@ const ARTISAN: Dictionary = {
 		"icon_col": 7,
 		"album_group": "artisan",
 	},
+	"rolo_fumo": {
+		"id": "rolo_fumo",
+		"name": "Rolo de Fumo",
+		"sell_price": 260,
+		"icon_sheet": "v13",
+		"icon_col": 8,
+		"album_group": "artisan",
+	},
+	"saca_cafe": {
+		"id": "saca_cafe",
+		"name": "Saca de Café",
+		"sell_price": 190,
+		"icon_sheet": "v13",
+		"icon_col": 6,
+		"album_group": "artisan",
+	},
 }
 
-const ARTISAN_ORDER: Array[String] = ["cheese", "bread", "honey", "farinha_mandioca"]
+const ARTISAN_ORDER: Array[String] = ["cheese", "bread", "honey", "farinha_mandioca", "rolo_fumo", "saca_cafe"]
 
 const MACHINES: Dictionary = {
 	"cheese_press": {
@@ -191,7 +207,7 @@ const ANIMAL_SHOP: Dictionary = {
 		"id": "chicken",
 		"name": "Galinha",
 		"buy_price": 100,
-		"desc": "Ovo ($30) ou Ovo Azul ($55) com carinho",
+		"desc": "Ovo (Rs 30) ou Ovo Azul (Rs 55) com carinho",
 		"icon_sheet": "base",
 		"icon_col": 6,
 	},
@@ -199,7 +215,7 @@ const ANIMAL_SHOP: Dictionary = {
 		"id": "sheep",
 		"name": "Ovelha",
 		"buy_price": 160,
-		"desc": "Produz Lã ($60) diariamente",
+		"desc": "Produz Lã (Rs 60) diariamente",
 		"icon_sheet": "base",
 		"icon_col": 12,
 	},
@@ -207,7 +223,7 @@ const ANIMAL_SHOP: Dictionary = {
 		"id": "cow",
 		"name": "Vaca",
 		"buy_price": 220,
-		"desc": "Produz Leite ($45) diariamente",
+		"desc": "Produz Leite (Rs 45) diariamente",
 		"icon_sheet": "base",
 		"icon_col": 7,
 	},
@@ -215,7 +231,7 @@ const ANIMAL_SHOP: Dictionary = {
 		"id": "pig",
 		"name": "Porco",
 		"buy_price": 260,
-		"desc": "Fareja Trufa ($80) diariamente",
+		"desc": "Fareja Trufa (Rs 80) diariamente",
 		"icon_sheet": "base",
 		"icon_col": 13,
 	},

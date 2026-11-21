@@ -114,6 +114,7 @@ var _transition_rect: ColorRect = null
 var _door_cooldown: float = 0.0
 var _tea_used_today: bool = false
 var _fountain_drank_today: bool = false
+var _capela_blessed_today: bool = false
 var _lamp_glows: Array[Sprite2D] = []
 var _tropeiro_body: StaticBody2D = null
 var _tropeiro_present: bool = false
@@ -177,6 +178,7 @@ class WeatherFxNode extends Node2D:
 		Vector2(126.0, 174.0),
 	]
 	var smoke_puffs: Array[Dictionary] = []
+	var butterflies: Array[Dictionary] = []
 	var _time_acc: float = 0.0
 	var _smoke_timer: float = 0.0
 	var _rng := RandomNumberGenerator.new()
@@ -189,6 +191,19 @@ class WeatherFxNode extends Node2D:
 				"pos": Vector2(_rng.randf_range(0.0, 640.0), _rng.randf_range(0.0, 384.0)),
 				"speed": _rng.randf_range(160.0, 230.0),
 				"len": _rng.randf_range(5.0, 9.0),
+			})
+		var b_colors: Array[Color] = [
+			Color(1.0, 0.86, 0.24, 0.92),
+			Color(0.32, 0.76, 1.0, 0.92),
+			Color(1.0, 0.44, 0.28, 0.92),
+			Color(0.96, 0.94, 0.48, 0.92),
+		]
+		for i in range(b_colors.size()):
+			butterflies.append({
+				"pos": Vector2(_rng.randf_range(60.0, 560.0), _rng.randf_range(70.0, 310.0)),
+				"vx": _rng.randf_range(10.0, 20.0) * (-1.0 if i % 2 == 0 else 1.0),
+				"phase": _rng.randf_range(0.0, TAU),
+				"color": b_colors[i],
 			})
 
 	func _process(delta: float) -> void:
@@ -203,6 +218,19 @@ class WeatherFxNode extends Node2D:
 				if p.y > 384.0 or p.x < -8.0:
 					p = Vector2(_rng.randf_range(0.0, 656.0), _rng.randf_range(-24.0, 0.0))
 				d["pos"] = p
+		elif not is_winter:
+			for b in butterflies:
+				var bp: Vector2 = b["pos"]
+				var bvx: float = float(b["vx"])
+				var bph: float = float(b["phase"])
+				bp.x += bvx * delta
+				bp.y += sin(_time_acc * 3.8 + bph) * 11.0 * delta
+				if bp.x > 610.0:
+					bp.x = 30.0
+				elif bp.x < 30.0:
+					bp.x = 610.0
+				bp.y = clampf(bp.y, 60.0, 340.0)
+				b["pos"] = bp
 
 		_smoke_timer += delta
 		if _smoke_timer >= 0.65:
@@ -226,13 +254,31 @@ class WeatherFxNode extends Node2D:
 		queue_redraw()
 
 	func _draw() -> void:
-		# Water sparkles on pond
+		# Water sparkles on pond & Chafariz basin
 		for i in range(sparkles.size()):
 			var phase: float = sin(_time_acc * 3.2 + float(i) * 1.7)
 			if phase > 0.35:
 				var sp: Vector2 = sparkles[i]
 				var alpha: float = (phase - 0.35) * 1.15
 				draw_rect(Rect2(sp.x, sp.y, 2.0, 1.0), Color(0.88, 0.98, 1.0, alpha))
+
+		# Animated Chafariz Colonial water jets & splashes
+		for jet_idx in range(2):
+			var jx: float = 114.0 if jet_idx == 0 else 126.0
+			var drop_y: float = 169.0 + fmod(_time_acc * 18.0 + float(jet_idx) * 3.0, 6.0)
+			draw_rect(Rect2(jx, drop_y, 1.5, 2.0), Color(0.82, 0.96, 1.0, 0.85))
+			var rip: float = 1.5 + absf(sin(_time_acc * 5.0 + float(jet_idx))) * 2.0
+			draw_rect(Rect2(jx - rip * 0.5, 174.5, rip, 1.0), Color(0.86, 0.98, 1.0, 0.65))
+
+		# Tropical butterflies in sunny weather
+		if not is_rainy and not is_winter:
+			for b in butterflies:
+				var bp: Vector2 = b["pos"]
+				var flap: float = absf(sin(_time_acc * 14.0 + float(b["phase"])))
+				var col: Color = b["color"]
+				var wing_w: float = 1.0 + flap * 1.5
+				draw_rect(Rect2(bp.x - wing_w, bp.y, wing_w, 1.5), col)
+				draw_rect(Rect2(bp.x + 0.5, bp.y, wing_w, 1.5), col)
 
 		# Chimney smoke puffs
 		for puff in smoke_puffs:
@@ -737,6 +783,7 @@ func _on_game_reset() -> void:
 		_end_fishing_minigame(false, true)
 	_tea_used_today = false
 	_fountain_drank_today = false
+	_capela_blessed_today = false
 	_apply_location_state("farm", Vector2(136.0, 118.0), Vector2i(0, 1))
 	soil_layer.clear()
 	for tile_var in _crops.keys():
@@ -1422,19 +1469,44 @@ func _handle_interact() -> void:
 			_show_toast("Água fresca do Chafariz! (+10 Energia)")
 		return
 
-	# Check proximity to Capela Rural Colonial
+	# Check proximity to Capela Rural Colonial -> daily blessing (+15% Gold harvest) + bell
 	if p_pos.distance_to(_tile_center(CAPELA_TILE)) <= 34.0:
-		_play_sfx("play_cozy")
+		_play_sfx("play_bell")
 		_spawn_particles(_tile_center(CAPELA_TILE), Color(1.0, 0.94, 0.65))
-		_show_toast("Capela da Fazenda: Que a colheita seja abençoada!")
+		if not _capela_blessed_today:
+			_capela_blessed_today = true
+			_spawn_floating_text(_tile_center(CAPELA_TILE) + Vector2(0.0, -20.0), "+15% Ouro ★", Color(1.0, 0.92, 0.35))
+			_show_toast("Bênção da Capela! +15% chance de colheita Ouro ★ hoje.")
+		else:
+			_show_toast("Capela da Fazenda: Bênção já ativa hoje (+15% Ouro ★).")
 		return
 
-	# Check proximity to Tropeiro Itinerante -> sell basket with +25% bonus
+	# Check proximity to Tropeiro Itinerante -> sell basket (+50% Pedido da Corte / +25% resto)
 	if _tropeiro_present and p_pos.distance_to(_tile_center(TROPEIRO_TILE)) <= 34.0:
-		var earned: int = int(_game_state.call("sell_all_harvested", 1.25, "Tropeiro (+25%)"))
+		var feat: Dictionary = _game_state.call("get_tropeiro_featured_item")
+		var feat_id: String = str(feat.get("id", ""))
+		var earned: int = int(_game_state.call("sell_all_harvested", 1.25, "Tropeiro", feat_id, 1.5))
 		if earned > 0:
 			_spawn_particles(_tile_center(TROPEIRO_TILE), Color(1.0, 0.88, 0.25))
-			_spawn_floating_text(_tile_center(TROPEIRO_TILE) + Vector2(0.0, -16.0), "+$%d (+25%%)" % earned, Color(1.0, 0.90, 0.25))
+			_spawn_floating_text(_tile_center(TROPEIRO_TILE) + Vector2(0.0, -16.0), "+Rs %d" % earned, Color(1.0, 0.90, 0.25))
+		return
+
+	# Check proximity to Terreiro de Secagem -> 2 Tabaco -> Rolo de Fumo or 2 Café -> Saca de Café
+	if p_pos.distance_to(TERREIRO_POS) <= 44.0:
+		var res_t: String = str(_game_state.call("process_terreiro_secagem"))
+		if res_t == "rolo_fumo":
+			_play_sfx("play_machine")
+			_spawn_particles(TERREIRO_POS, Color(0.86, 0.72, 0.32))
+			_spawn_floating_text(TERREIRO_POS + Vector2(0.0, -16.0), "+1 Rolo de Fumo", Color(1.0, 0.92, 0.45))
+			_show_toast("Terreiro: secou 1 Rolo de Fumo (Rs 260)!")
+		elif res_t == "saca_cafe":
+			_play_sfx("play_machine")
+			_spawn_particles(TERREIRO_POS, Color(0.72, 0.46, 0.28))
+			_spawn_floating_text(TERREIRO_POS + Vector2(0.0, -16.0), "+1 Saca de Café", Color(1.0, 0.88, 0.55))
+			_show_toast("Terreiro: torrou 1 Saca de Café (Rs 190)!")
+		else:
+			_play_sfx("play_error")
+			_show_toast("Terreiro precisa de 2 Tabacos ou 2 Cafés na sacola.")
 		return
 
 	# Check proximity to Casa de Farinha -> process 2 Mandioca into Farinha de Mandioca
@@ -1444,7 +1516,7 @@ func _handle_interact() -> void:
 			_play_sfx("play_machine")
 			_spawn_particles(_tile_center(CASA_FARINHA_TILE), Color(0.98, 0.92, 0.72))
 			_spawn_floating_text(_tile_center(CASA_FARINHA_TILE) + Vector2(0.0, -16.0), "+1 Farinha", Color(1.0, 0.95, 0.65))
-			_show_toast("Casa de Farinha: produziu 1 Farinha de Mandioca ($135)!")
+			_show_toast("Casa de Farinha: produziu 1 Farinha de Mandioca (Rs 135)!")
 		else:
 			_play_sfx("play_error")
 			_show_toast("Casa de Farinha precisa de 2 Mandiocas na sacola.")
@@ -2021,7 +2093,7 @@ func _harvest_crop(target_tile: Vector2i) -> void:
 	var regrow_days: int = int(crop_def.get("regrow_days", 0))
 	var days_to_grow: int = maxi(CropDataScript.get_effective_days_to_grow(crop_id, _current_season_id), 1)
 	var is_fertilized: bool = _fertilized_tiles.has(target_tile)
-	var gold_chance: float = 0.45 if is_fertilized else 0.10
+	var gold_chance: float = (0.45 if is_fertilized else 0.10) + (0.15 if _capela_blessed_today else 0.0)
 	var is_gold: bool = _rng.randf() < gold_chance
 
 	var spr_var: Variant = crop_info.get("sprite")
@@ -2061,7 +2133,7 @@ func _sell_at_shipping_bin() -> void:
 		return
 	var earned: int = int(_game_state.call("sell_all_harvested"))
 	if earned > 0:
-		_spawn_floating_text(_tile_center(SHIPPING_BIN_TILE) + Vector2(0.0, -12.0), "+$%d" % earned, Color(1.0, 0.88, 0.2))
+		_spawn_floating_text(_tile_center(SHIPPING_BIN_TILE) + Vector2(0.0, -12.0), "+Rs %d" % earned, Color(1.0, 0.88, 0.2))
 
 
 func _refill_watering_can() -> void:
@@ -2077,6 +2149,7 @@ func _refill_watering_can() -> void:
 func _on_day_advanced(_new_day: int) -> void:
 	_tea_used_today = false
 	_fountain_drank_today = false
+	_capela_blessed_today = false
 	_refresh_tropeiro_presence()
 	if _game_state != null:
 		var gs_season: String = str(_game_state.get("current_season"))
@@ -2293,6 +2366,8 @@ func export_world_state() -> Dictionary:
 		"location": _current_location,
 		"player_pos": [p_pos.x, p_pos.y],
 		"tea_used_today": _tea_used_today,
+		"fountain_drank_today": _fountain_drank_today,
+		"capela_blessed_today": _capela_blessed_today,
 	}
 
 
@@ -2398,6 +2473,7 @@ func _restore_world_state(data: Dictionary) -> void:
 
 	_tea_used_today = bool(data.get("tea_used_today", false))
 	_fountain_drank_today = bool(data.get("fountain_drank_today", false))
+	_capela_blessed_today = bool(data.get("capela_blessed_today", false))
 	var saved_loc: String = str(data.get("location", "farm"))
 	var saved_pos_var: Variant = data.get("player_pos", [])
 	var target_pos := Vector2(136.0, 118.0)
@@ -2570,11 +2646,23 @@ func _update_prompt_label(shop_open: bool) -> void:
 		hint = "[F] Beber / Encher Água" if not _fountain_drank_today else "[F] Encher Água"
 		anchor = _tile_center(FOUNTAIN_TILE) + Vector2(0.0, -24.0)
 	elif p_pos.distance_to(_tile_center(CAPELA_TILE)) <= 34.0:
-		hint = "[F] Orar na Capela"
+		hint = "[F] Bênção da Capela (+15% Ouro)" if not _capela_blessed_today else "[F] Orar na Capela"
 		anchor = _tile_center(CAPELA_TILE) + Vector2(0.0, -28.0)
 	elif _tropeiro_present and p_pos.distance_to(_tile_center(TROPEIRO_TILE)) <= 34.0:
-		hint = "[F] Vender ao Tropeiro (+25%)"
+		var feat: Dictionary = _game_state.call("get_tropeiro_featured_item") if _game_state != null else {}
+		var feat_name: String = str(feat.get("name", "Artesanal"))
+		hint = "[F] Tropeiro: +50%% %s (+25%% resto)" % feat_name
 		anchor = _tile_center(TROPEIRO_TILE) + Vector2(0.0, -24.0)
+	elif p_pos.distance_to(TERREIRO_POS) <= 44.0:
+		var harv_val: Variant = _game_state.get("harvested") if _game_state != null else {}
+		var harv: Dictionary = harv_val if harv_val is Dictionary else {}
+		if int(harv.get("strawberry", 0)) >= 2:
+			hint = "[F] Secar Tabaco -> Rolo de Fumo"
+		elif int(harv.get("turnip", 0)) >= 2:
+			hint = "[F] Secar Café -> Saca de Café"
+		else:
+			hint = "[F] Terreiro (2 Tabaco ou 2 Café)"
+		anchor = TERREIRO_POS + Vector2(0.0, -24.0)
 	elif p_pos.distance_to(_tile_center(CASA_FARINHA_TILE)) <= 36.0:
 		hint = "[F] Fazer Farinha (2 Mandioca)"
 		anchor = _tile_center(CASA_FARINHA_TILE) + Vector2(0.0, -24.0)

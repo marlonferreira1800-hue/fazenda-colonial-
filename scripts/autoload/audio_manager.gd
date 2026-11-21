@@ -90,6 +90,7 @@ func _synthesize_all_sfx() -> void:
 	_streams["season"] = _make_season_sfx()
 	_streams["door"] = _make_door_sfx()
 	_streams["cozy"] = _make_cozy_sfx()
+	_streams["bell"] = _make_bell_sfx()
 
 
 func toggle_mute() -> bool:
@@ -204,6 +205,10 @@ func play_door() -> void:
 
 func play_cozy() -> void:
 	_play_sfx("cozy", -5.0)
+
+
+func play_bell() -> void:
+	_play_sfx("bell", -4.0)
 
 
 func play_animal(animal_type: String) -> void:
@@ -670,4 +675,23 @@ func _make_cozy_sfx() -> AudioStreamWAV:
 			var wave: float = 0.72 * sin(TAU * freq * t) + 0.28 * _triangle(freq * t)
 			samples[idx] = wave * env * 0.58
 			idx += 1
+	return _build_wav(samples)
+
+
+func _make_bell_sfx() -> AudioStreamWAV:
+	var duration: float = 0.85
+	var count: int = int(duration * SAMPLE_RATE)
+	var samples := PackedFloat32Array()
+	samples.resize(count)
+	var base_freq: float = 523.25
+	for i in range(count):
+		var t: float = float(i) / float(SAMPLE_RATE)
+		var env: float = minf(1.0, t / 0.005) * exp(-t * 3.8)
+		var strike: float = exp(-t * 28.0) * 0.25 * sin(TAU * base_freq * 4.07 * t)
+		var tone: float = (
+			0.55 * sin(TAU * base_freq * t)
+			+ 0.28 * sin(TAU * base_freq * 2.0 * t) * exp(-t * 1.4)
+			+ 0.14 * sin(TAU * base_freq * 2.76 * t) * exp(-t * 2.2)
+		)
+		samples[i] = clampf((tone + strike) * env * 0.62, -0.95, 0.95)
 	return _build_wav(samples)
