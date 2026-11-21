@@ -1,4 +1,4 @@
-﻿extends CanvasLayer
+extends CanvasLayer
 ## Cozy pixel-art HUD, Tabbed Shop, Menu/Options & Touch UI for Fazendinha 2D (640x360 viewport).
 
 const UI_ICONS_PATH := "res://assets/sprites/ui_icons.png"
@@ -9,6 +9,7 @@ const VERSION_DATA_PATH := "res://scripts/data/version_data.gd"
 const CropDataScript := preload("res://scripts/data/crop_data.gd")
 const FarmCatalogScript := preload("res://scripts/data/farm_catalog.gd")
 const SeasonDataScript := preload("res://scripts/data/season_data.gd")
+const StoryDataScript := preload("res://scripts/data/story_data.gd")
 
 const FALLBACK_VERSION := "v1.6.2"
 const FALLBACK_AUTHOR := "@marlonferreira1800-hue (Marlon Ferreira)"
@@ -326,7 +327,7 @@ func toggle_shop() -> void:
 
 
 func toggle_journal(tab_idx: int = -1) -> void:
-	var clamped_tab: int = clampi(tab_idx, 0, 1) if tab_idx >= 0 else _journal_tab
+	var clamped_tab: int = clampi(tab_idx, 0, 2) if tab_idx >= 0 else _journal_tab
 	if _journal_open and tab_idx >= 0 and _journal_tab != clamped_tab:
 		_journal_tab = clamped_tab
 		_refresh_journal()
@@ -336,15 +337,74 @@ func toggle_journal(tab_idx: int = -1) -> void:
 	_set_journal_open(not _journal_open)
 
 
+var _dialogue_panel: PanelContainer = null
+var _dialogue_speaker_label: Label = null
+var _dialogue_body_label: Label = null
+var _dialogue_hint_label: Label = null
+var _dialogue_lines: Array[String] = []
+var _dialogue_idx: int = 0
+var _dialogue_open: bool = false
+var _dialogue_on_close: Callable = Callable()
+
+
+func show_dialogue(speaker: String, lines: Array, on_close: Callable = Callable()) -> void:
+	if _dialogue_panel == null or lines.is_empty():
+		return
+	close_all_modals()
+	_dialogue_lines.clear()
+	for l in lines:
+		_dialogue_lines.append(str(l))
+	_dialogue_idx = 0
+	_dialogue_open = true
+	_dialogue_on_close = on_close
+	_dialogue_speaker_label.text = speaker
+	_dialogue_body_label.text = _dialogue_lines[0]
+	_dialogue_hint_label.text = "[F / Espaço] Continuar (%d/%d)" % [1, _dialogue_lines.size()]
+	_dialogue_panel.visible = true
+
+
+func advance_dialogue() -> void:
+	if not _dialogue_open:
+		return
+	_dialogue_idx += 1
+	if _dialogue_idx >= _dialogue_lines.size():
+		close_dialogue()
+		return
+	_dialogue_body_label.text = _dialogue_lines[_dialogue_idx]
+	var is_last: bool = (_dialogue_idx == _dialogue_lines.size() - 1)
+	_dialogue_hint_label.text = "[F / Espaço] Fechar" if is_last else "[F / Espaço] Continuar (%d/%d)" % [_dialogue_idx + 1, _dialogue_lines.size()]
+
+
+func close_dialogue() -> void:
+	if not _dialogue_open:
+		return
+	_dialogue_open = false
+	if _dialogue_panel != null:
+		_dialogue_panel.visible = false
+	var cb := _dialogue_on_close
+	_dialogue_on_close = Callable()
+	if cb.is_valid():
+		cb.call()
+
+
+func is_dialogue_open() -> bool:
+	return _dialogue_open
+
+
 func close_all_modals() -> void:
 	_set_shop_open(false)
 	_set_journal_open(false)
 	_set_changelog_open(false)
 	_set_menu_open(false)
+	if _dialogue_open:
+		_dialogue_open = false
+		_dialogue_on_close = Callable()
+		if _dialogue_panel != null:
+			_dialogue_panel.visible = false
 
 
 func is_shop_open() -> bool:
-	return _shop_open or _changelog_open or _menu_open or _journal_open
+	return _shop_open or _changelog_open or _menu_open or _journal_open or _dialogue_open
 
 
 func toggle_changelog() -> void:
@@ -590,6 +650,7 @@ func _build_ui() -> void:
 	_build_controls_hint()
 	_build_shop_modal()
 	_build_journal_modal()
+	_build_dialogue_box()
 	_build_changelog_modal()
 	_build_menu_modal()
 	_build_season_banner()
@@ -1347,10 +1408,10 @@ func _build_journal_modal() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 
-	var tab_titles := ["Pedidos", "Álbum"]
+	var tab_titles := ["Pedidos", "Álbum", "Histórias"]
 	_journal_tab_buttons.clear()
 	for i in range(tab_titles.size()):
-		var t_btn := _make_wood_button(tab_titles[i], Vector2(58, 17), 7)
+		var t_btn := _make_wood_button(tab_titles[i], Vector2(54, 17), 7)
 		t_btn.pressed.connect(_on_journal_tab_pressed.bind(i))
 		header.add_child(t_btn)
 		_journal_tab_buttons.append(t_btn)
@@ -2640,7 +2701,7 @@ func _refresh_journal() -> void:
 			if can_deliver:
 				d_btn.pressed.connect(Callable(self, "_on_deliver_order_pressed").bind(i))
 			hbox.add_child(d_btn)
-	else:
+	elif _journal_tab == 1:
 		var prog: Dictionary = gs.call("get_album_progress")
 		_journal_content_vbox.add_child(_make_label("Descobertos: %d / %d itens da Fazenda" % [int(prog["found"]), int(prog["total"])], 8, COL_WOOD_DARK))
 
@@ -2679,6 +2740,79 @@ func _refresh_journal() -> void:
 					ic.modulate = Color(0.25, 0.20, 0.16, 0.35)
 				chip.add_child(ic)
 				items_row.add_child(chip)
+	else:
+		var quests_state: Dictionary = gs.get("story_quests")
+		var hearts: Dictionary = gs.get("npc_hearts")
+		var discovered_fk: Array = gs.get("folklore_discovered")
+
+		_journal_content_vbox.add_child(_make_label("Crônicas & Missões Coloniais", 8, COL_WOOD_DARK))
+		for q_id in StoryDataScript.QUEST_ORDER:
+			var q_def: Dictionary = StoryDataScript.QUESTS[q_id]
+			var st: String = str(quests_state.get(q_id, ""))
+			var status_tag: String = "CONCLUÍDA ✓" if st == "completed" else ("ATIVA" if st == "active" else "Não iniciada")
+			var card := PanelContainer.new()
+			card.add_theme_stylebox_override("panel", _make_flat_style(COL_PARCHMENT_ALT, Color("#568f46") if st == "completed" else Color("#b89563"), 1, 5, 3, 2))
+			_journal_content_vbox.add_child(card)
+			var q_vbox := VBoxContainer.new()
+			q_vbox.add_theme_constant_override("separation", 2)
+			card.add_child(q_vbox)
+			q_vbox.add_child(_make_label("%s (%s) — [%s]" % [str(q_def["title"]), str(q_def["giver_name"]), status_tag], 7, COL_GOLD_TEXT if st == "completed" else COL_WOOD_DARK))
+			var sum_lbl := _make_label("%s | Recompensa: %s" % [str(q_def["summary"]), str(q_def["reward_desc"])], 7, COL_INK)
+			sum_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			q_vbox.add_child(sum_lbl)
+
+		_journal_content_vbox.add_child(_make_label("Folclore Brasileiro (%d/4) & Vila Colonial" % discovered_fk.size(), 8, COL_WOOD_DARK))
+		for f_id in StoryDataScript.FOLKLORE_ORDER:
+			var f_def: Dictionary = StoryDataScript.FOLKLORE_INFO[f_id]
+			var seen: bool = discovered_fk.has(f_id)
+			var f_txt: String = "• %s — %s" % [str(f_def["name"]) if seen else "??? (Lenda oculta)", str(f_def["schedule"])]
+			_journal_content_vbox.add_child(_make_label(f_txt, 7, COL_INK if seen else COL_INK_MUTED))
+
+		for v_id in ["padre", "ferreiro", "quiteria"]:
+			var v_def: Dictionary = StoryDataScript.VILLAGERS[v_id]
+			var h_val: int = int(hearts.get(v_id, 0))
+			_journal_content_vbox.add_child(_make_label("♥ %s (%s): %d/5 corações" % [str(v_def["name"]), str(v_def["role"]), h_val], 7, COL_WOOD_DARK))
+
+
+func _build_dialogue_box() -> void:
+	_dialogue_panel = PanelContainer.new()
+	_dialogue_panel.name = "DialoguePanel"
+	_dialogue_panel.anchor_left = 0.5
+	_dialogue_panel.anchor_right = 0.5
+	_dialogue_panel.anchor_top = 1.0
+	_dialogue_panel.anchor_bottom = 1.0
+	_dialogue_panel.offset_left = -224
+	_dialogue_panel.offset_right = 224
+	_dialogue_panel.offset_top = -102
+	_dialogue_panel.offset_bottom = -28
+	_dialogue_panel.visible = false
+	_dialogue_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_dialogue_panel.add_theme_stylebox_override("panel", _make_flat_style(COL_PARCHMENT, COL_WOOD_BORDER, 3, 10, 7, 4))
+	_ui_root.add_child(_dialogue_panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	_dialogue_panel.add_child(vbox)
+
+	_dialogue_speaker_label = _make_label("Personagem", 9, COL_WOOD_DARK)
+	vbox.add_child(_dialogue_speaker_label)
+
+	_dialogue_body_label = _make_label("", 8, COL_INK)
+	_dialogue_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_dialogue_body_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(_dialogue_body_label)
+
+	var footer := HBoxContainer.new()
+	footer.alignment = BoxContainer.ALIGNMENT_END
+	vbox.add_child(footer)
+
+	_dialogue_hint_label = _make_label("[F / Espaço] Continuar", 7, COL_INK_MUTED)
+	_dialogue_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(_dialogue_hint_label)
+
+	var next_btn := _make_wood_button("Avançar", Vector2(58, 16), 7)
+	next_btn.pressed.connect(advance_dialogue)
+	footer.add_child(next_btn)
 
 
 func _shop_upgrade_desc_label_get(uid: String) -> Label:
