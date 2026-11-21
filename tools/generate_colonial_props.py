@@ -286,10 +286,234 @@ def generate_palmeira() -> None:
     img.save(OUT_DIR / "palmeira_imperial.png")
 
 
+def generate_pe_de_moleque() -> None:
+    """Calçamento colonial pé-de-moleque (32x32) com pedras irregulares sobre terra."""
+    img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    dirt = (132, 108, 82, 155)
+    stone_dark = (102, 100, 96, 230)
+    stone_mid = (138, 134, 126, 235)
+    stone_light = (168, 164, 154, 235)
+
+    # Base suave de terra batida entre as pedras (borda arredondada)
+    rect(img, 2, 2, 29, 29, dirt)
+    rect(img, 1, 4, 30, 27, dirt)
+    rect(img, 4, 1, 27, 30, dirt)
+
+    # Pedras irregulares de pé-de-moleque
+    stones = [
+        (3, 3, 9, 7), (11, 2, 18, 6), (20, 3, 27, 7),
+        (2, 9, 7, 14), (9, 8, 16, 13), (18, 9, 24, 14), (26, 9, 30, 14),
+        (3, 16, 10, 20), (12, 15, 19, 20), (21, 16, 28, 21),
+        (2, 22, 8, 27), (10, 22, 17, 28), (19, 23, 26, 28), (27, 23, 30, 27),
+    ]
+    for i, (x0, y0, x1, y1) in enumerate(stones):
+        rect(img, x0, y0, x1, y1, stone_dark)
+        rect(img, x0 + 1, y0 + 1, x1 - 1, y1 - 1, stone_mid if i % 2 == 0 else stone_light)
+        px(img, x0 + 1, y0 + 1, stone_light)
+
+    img.save(OUT_DIR / "pe_de_moleque.png")
+
+
+def generate_terreiro_secagem() -> None:
+    """Terreiro ladrilhado colonial (64x40) com montes de café e tabaco secando ao sol."""
+    img = Image.new("RGBA", (64, 40), (0, 0, 0, 0))
+    border = (96, 74, 54, 245)
+    tile_a = (166, 126, 88, 235)
+    tile_b = (152, 114, 78, 235)
+    tile_line = (122, 90, 62, 220)
+    coffee_dark = (74, 44, 28, 255)
+    coffee_mid = (112, 68, 42, 255)
+    coffee_red = (156, 54, 44, 255)
+    tobacco_dark = (104, 88, 40, 255)
+    tobacco_mid = (146, 124, 56, 255)
+
+    # Mureta baixa ao redor do terreiro
+    rect(img, 1, 1, 62, 38, border)
+    rect(img, 3, 3, 60, 36, tile_a)
+
+    # Ladrilhos quadriculados
+    for ty in range(3, 36, 6):
+        for tx in range(3, 60, 8):
+            c = tile_a if ((tx // 8 + ty // 6) % 2 == 0) else tile_b
+            rect(img, tx, ty, min(tx + 6, 59), min(ty + 4, 35), c)
+            rect(img, tx, min(ty + 5, 36), min(tx + 7, 60), min(ty + 5, 36), tile_line)
+
+    # Leiras de grãos de café secando (esquerda)
+    for row_y in (8, 16, 24):
+        rect(img, 8, row_y, 26, row_y + 4, coffee_dark)
+        rect(img, 9, row_y + 1, 25, row_y + 3, coffee_mid)
+        for gx in range(10, 25, 3):
+            px(img, gx, row_y + 1, coffee_red)
+
+    # Folhas de tabaco / fumo secando (direita)
+    for row_y in (9, 18, 26):
+        rect(img, 34, row_y, 54, row_y + 4, tobacco_dark)
+        rect(img, 35, row_y + 1, 53, row_y + 3, tobacco_mid)
+
+    img.save(OUT_DIR / "terreiro_secagem.png")
+
+
+def generate_porteira_colonial() -> None:
+    """Porteira rústica de madeira (40x20) na entrada da Estrada Real."""
+    img = Image.new("RGBA", (40, 20), (0, 0, 0, 0))
+    outline = (42, 30, 22, 255)
+    wood_dark = (94, 62, 38, 255)
+    wood_mid = (134, 90, 54, 255)
+    wood_light = (172, 122, 74, 255)
+    stone = (130, 128, 124, 255)
+
+    # Mourões laterais (esquerdo e direito) com base de pedra
+    for mx in (2, 33):
+        rect(img, mx - 1, 15, mx + 5, 18, stone)
+        rect(img, mx, 2, mx + 4, 17, outline)
+        rect(img, mx + 1, 3, mx + 3, 16, wood_mid)
+        rect(img, mx + 1, 3, mx + 1, 16, wood_light)
+        px(img, mx + 2, 1, wood_dark)
+
+    # Folha da porteira aberta para a esquerda (não bloqueia passagem central)
+    rect(img, 6, 6, 13, 15, outline)
+    for ry in (7, 10, 13):
+        rect(img, 6, ry, 12, ry + 1, wood_mid)
+        px(img, 7, ry, wood_light)
+    rect(img, 11, 6, 12, 15, wood_dark)
+
+    # Folha direita entreaberta
+    rect(img, 26, 6, 33, 15, outline)
+    for ry in (7, 10, 13):
+        rect(img, 27, ry, 33, ry + 1, wood_mid)
+        px(img, 28, ry, wood_light)
+    rect(img, 27, 6, 28, 15, wood_dark)
+
+    img.save(OUT_DIR / "porteira_colonial.png")
+
+
+def generate_cruzeiro_colonial() -> None:
+    """Cruzeiro colonial de madeira e pedra (16x32) para o adro da Capela."""
+    img = Image.new("RGBA", (16, 32), (0, 0, 0, 0))
+    outline = (36, 28, 24, 255)
+    stone_dark = (104, 104, 108, 255)
+    stone_light = (156, 156, 160, 255)
+    wood_dark = (88, 56, 34, 255)
+    wood_mid = (128, 86, 50, 255)
+    gold = (224, 186, 82, 255)
+
+    # Sombra
+    rect(img, 2, 28, 13, 30, (20, 24, 20, 90))
+    # Pedestal escalonado de pedra
+    rect(img, 2, 24, 13, 29, outline)
+    rect(img, 3, 25, 12, 28, stone_dark)
+    rect(img, 4, 22, 11, 25, outline)
+    rect(img, 5, 23, 10, 24, stone_light)
+
+    # Haste vertical da cruz
+    rect(img, 6, 2, 9, 22, outline)
+    rect(img, 7, 3, 8, 22, wood_mid)
+    rect(img, 8, 3, 8, 22, wood_dark)
+
+    # Braço horizontal
+    rect(img, 2, 7, 13, 10, outline)
+    rect(img, 3, 8, 12, 9, wood_mid)
+    px(img, 7, 8, gold)
+    px(img, 8, 8, gold)
+
+    img.save(OUT_DIR / "cruzeiro_colonial.png")
+
+
+def generate_barris_engenho() -> None:
+    """Barris de aguardente/melado e sacas de açúcar (28x18) para o Engenho."""
+    img = Image.new("RGBA", (28, 18), (0, 0, 0, 0))
+    outline = (38, 28, 22, 255)
+    wood_dark = (102, 66, 38, 255)
+    wood_mid = (146, 98, 56, 255)
+    iron = (72, 76, 84, 255)
+    sack_light = (214, 196, 156, 255)
+    sack_mid = (178, 158, 118, 255)
+
+    # Sombra
+    rect(img, 2, 14, 25, 16, (20, 24, 20, 90))
+
+    # Dois barris de madeira com aros de ferro
+    for bx in (2, 10):
+        rect(img, bx, 4, bx + 7, 15, outline)
+        rect(img, bx + 1, 5, bx + 6, 14, wood_mid)
+        rect(img, bx + 5, 5, bx + 6, 14, wood_dark)
+        rect(img, bx + 1, 7, bx + 6, 7, iron)
+        rect(img, bx + 1, 12, bx + 6, 12, iron)
+
+    # Sacas de açúcar mascavo empilhadas à direita
+    rect(img, 18, 7, 26, 15, outline)
+    rect(img, 19, 8, 25, 14, sack_mid)
+    rect(img, 19, 8, 24, 10, sack_light)
+    rect(img, 19, 3, 25, 8, outline)
+    rect(img, 20, 4, 24, 7, sack_light)
+
+    img.save(OUT_DIR / "barris_engenho.png")
+
+
+def generate_tropeiro_mula() -> None:
+    """Tropeiro colonial de chapéu de aba larga com mula cargueira (32x28)."""
+    img = Image.new("RGBA", (32, 28), (0, 0, 0, 0))
+    outline = (36, 28, 24, 255)
+    hat = (96, 62, 34, 255)
+    skin = (212, 162, 124, 255)
+    poncho = (154, 58, 46, 255)
+    poncho_dark = (114, 38, 30, 255)
+    pants = (68, 62, 54, 255)
+    mule_dark = (104, 78, 56, 255)
+    mule_mid = (138, 106, 78, 255)
+    pack = (204, 184, 138, 255)
+    gold = (226, 188, 74, 255)
+
+    # Sombra
+    rect(img, 3, 24, 29, 26, (20, 24, 20, 90))
+
+    # Mula cargueira (direita)
+    rect(img, 15, 12, 28, 20, outline)
+    rect(img, 16, 13, 27, 19, mule_mid)
+    # Cabeça e orelhas da mula
+    rect(img, 25, 8, 30, 14, outline)
+    rect(img, 26, 9, 29, 13, mule_dark)
+    rect(img, 26, 5, 27, 8, mule_dark)
+    rect(img, 28, 5, 29, 8, mule_dark)
+    # Pernas
+    for lx in (16, 19, 24, 26):
+        rect(img, lx, 20, lx + 1, 25, outline)
+    # Bruaca / carga de mantimentos
+    rect(img, 17, 9, 24, 15, outline)
+    rect(img, 18, 10, 23, 14, pack)
+    px(img, 20, 12, gold)
+
+    # Tropeiro (esquerda)
+    # Chapéu de aba larga
+    rect(img, 3, 5, 13, 7, outline)
+    rect(img, 5, 3, 11, 6, hat)
+    rect(img, 4, 6, 12, 6, hat)
+    # Rosto
+    rect(img, 6, 7, 10, 10, skin)
+    px(img, 7, 8, outline)
+    px(img, 9, 8, outline)
+    # Poncho / gibão colonial
+    rect(img, 4, 11, 12, 19, outline)
+    rect(img, 5, 12, 11, 18, poncho)
+    rect(img, 5, 16, 11, 18, poncho_dark)
+    rect(img, 7, 13, 9, 15, gold)
+    # Botas/calças
+    rect(img, 5, 19, 7, 25, pants)
+    rect(img, 9, 19, 11, 25, pants)
+
+    img.save(OUT_DIR / "tropeiro_mula.png")
+
+
 if __name__ == "__main__":
     generate_chafariz()
     generate_capela()
     generate_carro_de_boi()
     generate_lampiao()
     generate_palmeira()
+    generate_pe_de_moleque()
+    generate_terreiro_secagem()
+    generate_porteira_colonial()
+    generate_cruzeiro_colonial()
+    generate_barris_engenho()
+    generate_tropeiro_mula()
     print("Sprites coloniais gerados com sucesso em", OUT_DIR)

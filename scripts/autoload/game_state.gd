@@ -134,6 +134,7 @@ var artisan: Dictionary = {
 	"cheese": 0,
 	"bread": 0,
 	"honey": 0,
+	"farinha_mandioca": 0,
 }
 var supplies: Dictionary = {
 	"fertilizer": 2,
@@ -1207,6 +1208,7 @@ func reset_save() -> void:
 		"cheese": 0,
 		"bread": 0,
 		"honey": 0,
+		"farinha_mandioca": 0,
 	}
 	supplies = {
 		"fertilizer": 2,

@@ -110,9 +110,17 @@ const ARTISAN: Dictionary = {
 		"icon_col": 8,
 		"album_group": "artisan",
 	},
+	"farinha_mandioca": {
+		"id": "farinha_mandioca",
+		"name": "Farinha de Mandioca",
+		"sell_price": 135,
+		"icon_sheet": "v13",
+		"icon_col": 7,
+		"album_group": "artisan",
+	},
 }
 
-const ARTISAN_ORDER: Array[String] = ["cheese", "bread", "honey"]
+const ARTISAN_ORDER: Array[String] = ["cheese", "bread", "honey", "farinha_mandioca"]
 
 const MACHINES: Dictionary = {
 	"cheese_press": {

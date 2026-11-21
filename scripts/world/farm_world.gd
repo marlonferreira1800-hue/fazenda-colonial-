@@ -30,6 +30,9 @@ const FOUNTAIN_TILE := Vector2i(7, 10)
 const CAPELA_TILE := Vector2i(4, 5)
 const PAIOL_TILE := Vector2i(5, 16)
 const CARRO_BOI_TILE := Vector2i(21, 20)
+const CASA_FARINHA_TILE := Vector2i(25, 5)
+const TROPEIRO_TILE := Vector2i(19, 20)
+const TERREIRO_POS := Vector2(128.0, 292.0)
 const HOUSE_DOOR_POS := Vector2(128.0, 96.0)
 const HOUSE_EXIT_SPAWN_POS := Vector2(128.0, 102.0)
 const HOUSE_DOOR_TILES: Array[Vector2i] = [
@@ -278,6 +281,7 @@ func _ready() -> void:
 	_setup_weather_fx()
 	_setup_fishing_minigame()
 	_build_farm_map()
+	_spawn_colonial_ground_decals()
 	_spawn_buildings_and_props()
 	_spawn_animals()
 	_setup_house_interior()
@@ -317,6 +321,7 @@ func _ready() -> void:
 	_apply_season_visuals(init_season if not init_season.is_empty() else "spring")
 	_refresh_machines()
 	_refresh_order_badge()
+	_refresh_tropeiro_presence()
 	_sync_weather_fx()
 	_update_day_night_tint()
 
@@ -840,6 +845,34 @@ func _build_farm_map() -> void:
 	obstacle_layer.set_cell(SHIPPING_BIN_TILE, 0, TILE_SHIPPING_BIN)
 
 
+func _spawn_colonial_ground_decals() -> void:
+	# Calçamento pé-de-moleque no pátio da Casa-Grande, Capela e Chafariz
+	var cobble_tex := _load_texture_safe("res://assets/sprites/colonial_buildings_px/pe_de_moleque.png")
+	if cobble_tex != null:
+		for gy in [6, 8, 10]:
+			for gx in [4, 6, 8]:
+				var spr := Sprite2D.new()
+				spr.name = "PeDeMoleque_%d_%d" % [gx, gy]
+				spr.texture = cobble_tex
+				spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+				spr.position = Vector2((gx + 1) * TILE_SIZE, (gy + 1) * TILE_SIZE)
+				spr.z_index = -2
+				add_child(spr)
+				_exterior_props.append(spr)
+
+	# Terreiro de secagem de café e tabaco ao lado do Paiol
+	var terreiro_tex := _load_texture_safe("res://assets/sprites/colonial_buildings_px/terreiro_secagem.png")
+	if terreiro_tex != null:
+		var t_spr := Sprite2D.new()
+		t_spr.name = "TerreiroSecagem"
+		t_spr.texture = terreiro_tex
+		t_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		t_spr.position = TERREIRO_POS
+		t_spr.z_index = -2
+		add_child(t_spr)
+		_exterior_props.append(t_spr)
+
+
 func _spawn_buildings_and_props() -> void:
 	# Casa-Grande Colonial (taipa, varanda e telha capa-canal) na entrada (128, 96)
 	_spawn_colonial_building(
@@ -942,6 +975,55 @@ func _spawn_buildings_and_props() -> void:
 		Vector2(0.0, -8.0),
 		Rect2(0.0, -4.0, 34.0, 14.0)
 	)
+
+	# Cruzeiro Colonial no adro da Capela
+	_spawn_colonial_building(
+		"CruzeiroColonial",
+		"res://assets/sprites/colonial_buildings_px/cruzeiro_colonial.png",
+		Vector2(2.6 * TILE_SIZE + 8.0, 5.4 * TILE_SIZE + 8.0),
+		Vector2(0.0, -13.0),
+		Rect2(0.0, -3.0, 10.0, 8.0)
+	)
+
+	# Barris de aguardente/melado e sacas de açúcar ao lado do Engenho
+	_spawn_colonial_building(
+		"BarrisEngenho",
+		"res://assets/sprites/colonial_buildings_px/barris_engenho.png",
+		Vector2(22.5 * TILE_SIZE + 8.0, 5.4 * TILE_SIZE + 4.0),
+		Vector2(0.0, -6.0),
+		Rect2(0.0, -3.0, 24.0, 10.0)
+	)
+
+	# Porteira rústica aberta na entrada da Estrada Real (sem colisão central para passagem livre)
+	var porteira_tex := _load_texture_safe("res://assets/sprites/colonial_buildings_px/porteira_colonial.png")
+	if porteira_tex != null:
+		var p_spr := Sprite2D.new()
+		p_spr.name = "PorteiraColonial"
+		p_spr.texture = porteira_tex
+		p_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		p_spr.position = Vector2(18.0 * TILE_SIZE, 22.8 * TILE_SIZE)
+		p_spr.offset = Vector2(0.0, -6.0)
+		add_child(p_spr)
+		_exterior_props.append(p_spr)
+
+	# Tropeiro Itinerante (aparece a cada 3 dias na Estrada Real pagando +25% em Réis)
+	_tropeiro_body = _spawn_colonial_building(
+		"TropeiroNPC",
+		"res://assets/sprites/colonial_buildings_px/tropeiro_mula.png",
+		Vector2(TROPEIRO_TILE.x * TILE_SIZE + 4.0, TROPEIRO_TILE.y * TILE_SIZE + 8.0),
+		Vector2(0.0, -10.0),
+		Rect2(0.0, -4.0, 26.0, 12.0)
+	)
+	if _tropeiro_body != null and _v13_props_texture != null:
+		var t_badge := Sprite2D.new()
+		var t_atlas := AtlasTexture.new()
+		t_atlas.atlas = _v13_props_texture
+		t_atlas.region = Rect2(96, 16, 16, 16)
+		t_badge.texture = t_atlas
+		t_badge.position = Vector2(-6.0, -24.0)
+		t_badge.scale = Vector2(0.75, 0.75)
+		t_badge.z_index = 8
+		_tropeiro_body.add_child(t_badge)
 
 	# Palmeiras Imperiais (símbolo das sedes de fazendas coloniais)
 	var palm_positions: Array[Vector2] = [
@@ -1332,6 +1414,27 @@ func _handle_interact() -> void:
 		_play_sfx("play_cozy")
 		_spawn_particles(_tile_center(CAPELA_TILE), Color(1.0, 0.94, 0.65))
 		_show_toast("Capela da Fazenda: Que a colheita seja abençoada!")
+		return
+
+	# Check proximity to Tropeiro Itinerante -> sell basket with +25% bonus
+	if _tropeiro_present and p_pos.distance_to(_tile_center(TROPEIRO_TILE)) <= 34.0:
+		var earned: int = int(_game_state.call("sell_all_harvested", 1.25, "Tropeiro (+25%)"))
+		if earned > 0:
+			_spawn_particles(_tile_center(TROPEIRO_TILE), Color(1.0, 0.88, 0.25))
+			_spawn_floating_text(_tile_center(TROPEIRO_TILE) + Vector2(0.0, -16.0), "+$%d (+25%%)" % earned, Color(1.0, 0.90, 0.25))
+		return
+
+	# Check proximity to Casa de Farinha -> process 2 Mandioca into Farinha de Mandioca
+	if p_pos.distance_to(_tile_center(CASA_FARINHA_TILE)) <= 36.0:
+		var res_f: String = str(_game_state.call("process_casa_farinha"))
+		if res_f == "ok":
+			_play_sfx("play_machine")
+			_spawn_particles(_tile_center(CASA_FARINHA_TILE), Color(0.98, 0.92, 0.72))
+			_spawn_floating_text(_tile_center(CASA_FARINHA_TILE) + Vector2(0.0, -16.0), "+1 Farinha", Color(1.0, 0.95, 0.65))
+			_show_toast("Casa de Farinha: produziu 1 Farinha de Mandioca ($135)!")
+		else:
+			_play_sfx("play_error")
+			_show_toast("Casa de Farinha precisa de 2 Mandiocas na sacola.")
 		return
 
 	# Check proximity to Paiol Colonial
@@ -1961,6 +2064,7 @@ func _refill_watering_can() -> void:
 func _on_day_advanced(_new_day: int) -> void:
 	_tea_used_today = false
 	_fountain_drank_today = false
+	_refresh_tropeiro_presence()
 	if _game_state != null:
 		var gs_season: String = str(_game_state.get("current_season"))
 		if not gs_season.is_empty():
@@ -2638,6 +2742,9 @@ func _set_exterior_active(active: bool) -> void:
 		if is_instance_valid(prop) and prop is Node2D:
 			(prop as Node2D).visible = active
 			prop.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
+
+	if _tropeiro_body != null and is_instance_valid(_tropeiro_body):
+		_tropeiro_body.visible = active and _tropeiro_present
 
 	for tile_var in _crops.keys():
 		var spr: Variant = _crops[tile_var].get("sprite")
