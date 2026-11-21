@@ -421,3 +421,78 @@ static func get_villager_specs(tile_size: int) -> Array[Dictionary]:
 			},
 		},
 	]
+
+
+const SEASONAL_FESTIVALS: Dictionary = {
+	"spring": {
+		"id": "festa_flores",
+		"day": 14,
+		"name": "Festa das Flores",
+		"bonfire": false,
+		"banner_colors": [Color("#ff80ab"), Color("#ffe082"), Color("#80cbc4"), Color("#ce93d8")],
+		"chatter": ["Viva a Festa das Flores!", "A Praça tá perfumada!", "Que primavera linda!"],
+	},
+	"summer": {
+		"id": "festa_cana",
+		"day": 14,
+		"name": "Festa da Colheita da Cana",
+		"bonfire": false,
+		"banner_colors": [Color("#ffd54f"), Color("#ff8a65"), Color("#81c784"), Color("#fff176")],
+		"chatter": ["Viva a colheita farta!", "Caldo de cana pra toda vila!", "Saudemos o verão!"],
+	},
+	"autumn": {
+		"id": "feira_engenho",
+		"day": 14,
+		"name": "Feira do Engenho",
+		"bonfire": false,
+		"banner_colors": [Color("#ffb74d"), Color("#d84315"), Color("#fdd835"), Color("#8d6e63")],
+		"chatter": ["Melhor Feira do Engenho!", "Produtos artesanais de ouro!", "Bela festa no Coreto!"],
+	},
+	"winter": {
+		"id": "festa_junina",
+		"day": 14,
+		"name": "Festa Junina do Arraial",
+		"bonfire": true,
+		"banner_colors": [Color("#ef5350"), Color("#ffee58"), Color("#42a5f5"), Color("#66bb6a")],
+		"chatter": ["Viva São João! ♪", "Olha a fogueira no Coreto!", "Pamonha, milho e moda de viola!"],
+	},
+}
+
+const FAVORITE_GIFTS: Dictionary = {
+	"manoel": ["bread", "cheese", "saca_cafe", "wheat"],
+	"bento": ["turnip", "saca_cafe", "cheese", "farinha_mandioca"],
+	"quiteria": ["strawberry", "honey", "rolo_fumo", "turnip"],
+	"antonio": ["turnip", "saca_cafe", "bread", "honey"],
+	"tiao": ["tilapia", "trout", "shrimp", "golden_carp"],
+	"sinha": ["pumpkin", "wool", "milk", "egg"],
+	"ze": ["honey", "wheat", "cheese", "corn"],
+	"chico": ["corn", "tomato", "carrot", "farinha_mandioca"],
+}
+
+const FESTIVAL_SPOTS: Dictionary = {
+	"manoel": "praca_nw",
+	"bento": "praca_w",
+	"quiteria": "praca_ne",
+	"antonio": "praca_s",
+	"tiao": "praca_sw",
+	"sinha": "praca_se",
+	"ze": "praca_s",
+	"chico": "praca_e",
+}
+
+
+static func get_active_festival(season_id: String, day_of_season: int) -> Dictionary:
+	if SEASONAL_FESTIVALS.has(season_id):
+		var fest: Dictionary = SEASONAL_FESTIVALS[season_id]
+		if int(fest.get("day", -1)) == day_of_season:
+			return fest
+	return {}
+
+
+static func get_favorite_gifts(npc_id: String) -> Array[String]:
+	var out: Array[String] = []
+	if FAVORITE_GIFTS.has(npc_id):
+		for item in (FAVORITE_GIFTS[npc_id] as Array):
+			out.append(str(item))
+	return out
+

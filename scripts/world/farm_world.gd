@@ -159,6 +159,7 @@ var _cursor_fill: ColorRect = null
 var _extra_cursor_rects: Array[ColorRect] = []
 var _prompt_label: Label = null
 var _weather_fx: Node2D = null
+var _festival_decor: Node2D = null
 var _current_target_tile: Vector2i = Vector2i.ZERO
 var _target_in_reach: bool = true
 
@@ -335,6 +336,77 @@ class WeatherFxNode extends Node2D:
 					draw_line(p, p + Vector2(-0.25 * l, l), Color(0.72, 0.88, 1.0, 0.62), 1.0)
 
 
+class FestivalDecorNode extends Node2D:
+	var active: bool = false
+	var show_bonfire: bool = false
+	var banner_colors: Array[Color] = [
+		Color("#ef5350"),
+		Color("#ffee58"),
+		Color("#42a5f5"),
+		Color("#66bb6a"),
+	]
+	var _t: float = 0.0
+
+	func _ready() -> void:
+		z_index = 14
+		visible = false
+
+	func _process(delta: float) -> void:
+		if not active:
+			return
+		_t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		if not active:
+			return
+		# Cordões de bandeirinhas coloridas cruzando a Praça do Coreto
+		var strings: Array[Array] = [
+			[Vector2(760.0, 140.0), Vector2(916.0, 140.0)],
+			[Vector2(760.0, 140.0), Vector2(916.0, 232.0)],
+			[Vector2(916.0, 140.0), Vector2(760.0, 232.0)],
+			[Vector2(760.0, 232.0), Vector2(916.0, 232.0)],
+		]
+		var c_count: int = maxi(banner_colors.size(), 1)
+		for s_idx in range(strings.size()):
+			var a: Vector2 = strings[s_idx][0]
+			var b: Vector2 = strings[s_idx][1]
+			draw_line(a, b, Color(0.26, 0.18, 0.12, 0.8), 1.0)
+			var steps: int = 12
+			for i in range(1, steps):
+				var u: float = float(i) / float(steps)
+				var sag: float = sin(u * PI) * 8.0
+				var sway: float = sin(_t * 3.5 + float(i) + float(s_idx)) * 1.2
+				var pt: Vector2 = a.lerp(b, u) + Vector2(sway, sag)
+				var col: Color = banner_colors[(i + s_idx) % c_count]
+				var tri := PackedVector2Array([
+					pt + Vector2(-3.0, 0.0),
+					pt + Vector2(3.0, 0.0),
+					pt + Vector2(0.0, 5.5),
+				])
+				draw_colored_polygon(tri, col)
+
+		# Fogueira animada na Festa Junina (em frente ao Coreto)
+		if show_bonfire:
+			var fc := Vector2(828.0, 234.0)
+			# Lenha cruzada
+			draw_line(fc + Vector2(-8.0, 3.0), fc + Vector2(8.0, -3.0), Color("#6d4123"), 3.0)
+			draw_line(fc + Vector2(-8.0, -3.0), fc + Vector2(8.0, 3.0), Color("#543018"), 3.0)
+			# Chamas oscilantes
+			var flick: float = sin(_t * 12.0) * 2.0
+			draw_circle(fc + Vector2(0.0, -5.0), 11.0 + flick * 0.4, Color(1.0, 0.56, 0.12, 0.25))
+			draw_colored_polygon(PackedVector2Array([
+				fc + Vector2(-6.0, 1.0),
+				fc + Vector2(6.0, 1.0),
+				fc + Vector2(flick * 0.4, -14.0 - absf(flick)),
+			]), Color("#ff6d00"))
+			draw_colored_polygon(PackedVector2Array([
+				fc + Vector2(-3.5, 0.5),
+				fc + Vector2(3.5, 0.5),
+				fc + Vector2(-flick * 0.3, -9.5 - absf(flick) * 0.6),
+			]), Color("#ffd600"))
+
+
 func _ready() -> void:
 	_rng.randomize()
 	_game_state = get_node_or_null("/root/GameState")
@@ -363,6 +435,7 @@ func _ready() -> void:
 	_setup_season_particles()
 	_setup_transition_overlay()
 	_setup_weather_fx()
+	_setup_festival_decor()
 	_setup_fishing_minigame()
 	_build_farm_map()
 	_spawn_colonial_ground_decals()
@@ -615,6 +688,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
+	if event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).keycode == KEY_G:
+		_gift_nearby_villager()
+		get_viewport().set_input_as_handled()
+		return
+
 	if event.is_action_pressed("action_use"):
 		var tile: Vector2i = _get_keyboard_target_tile()
 		_handle_use_on_tile(tile)
@@ -774,6 +852,12 @@ func _setup_weather_fx() -> void:
 	_weather_fx = WeatherFxNode.new()
 	_weather_fx.name = "WeatherFX"
 	add_child(_weather_fx)
+
+
+func _setup_festival_decor() -> void:
+	_festival_decor = FestivalDecorNode.new()
+	_festival_decor.name = "FestivalDecor"
+	add_child(_festival_decor)
 
 
 func _setup_fishing_minigame() -> void:
@@ -1527,13 +1611,143 @@ func _spawn_villagers() -> void:
 		_villagers.append(v_node)
 
 
+func _get_active_festival() -> Dictionary:
+	if _game_state == null:
+		return {}
+	var s_id: String = str(_game_state.get("current_season"))
+	var d_of_s: int = int(_game_state.get("day_of_season"))
+	return VillageDataScript.get_active_festival(s_id, d_of_s)
+
+
+func _refresh_festival_decor() -> void:
+	if _festival_decor == null or not is_instance_valid(_festival_decor):
+		return
+	var fest: Dictionary = _get_active_festival()
+	var is_fest: bool = not fest.is_empty()
+	_festival_decor.set("active", is_fest)
+	_festival_decor.visible = (_current_location == "farm") and is_fest
+	if is_fest:
+		_festival_decor.set("show_bonfire", bool(fest.get("bonfire", false)))
+		var cols_val: Variant = fest.get("banner_colors", [])
+		if cols_val is Array:
+			var typed_cols: Array[Color] = []
+			for c in (cols_val as Array):
+				if c is Color:
+					typed_cols.append(c as Color)
+			if not typed_cols.is_empty():
+				_festival_decor.set("banner_colors", typed_cols)
+	_festival_decor.queue_redraw()
+
+
 func _sync_villagers(instant: bool = false) -> void:
 	var mins: float = float(_game_state.get("time_minutes")) if _game_state != null else 360.0
 	var is_rain: bool = _game_state != null and str(_game_state.get("weather")) == "rainy"
+	var fest: Dictionary = _get_active_festival()
 	for v in _villagers:
 		if is_instance_valid(v) and v.has_method("sync_to_time"):
-			v.call("sync_to_time", mins, is_rain, instant)
+			var v_fest: Dictionary = {}
+			if not fest.is_empty():
+				v_fest = fest.duplicate()
+				var vid: String = str(v.get("npc_id"))
+				v_fest["spot"] = str(VillageDataScript.FESTIVAL_SPOTS.get(vid, "praca_s"))
+			v.call("sync_to_time", mins, is_rain, instant, v_fest)
+	_refresh_festival_decor()
 	_refresh_window_glows()
+
+
+func get_minimap_snapshot() -> Dictionary:
+	var p_pos := Vector2(136.0, 118.0)
+	if player != null and _current_location == "farm":
+		p_pos = player.global_position
+	elif _current_location == "house":
+		p_pos = HOUSE_DOOR_POS
+	var v_arr: Array[Dictionary] = []
+	for v in _villagers:
+		if is_instance_valid(v):
+			v_arr.append({
+				"id": str(v.get("npc_id")),
+				"name": str(v.get("npc_name")),
+				"role": str(v.get("role")),
+				"pos": v.global_position,
+				"hearts": int(v.get("hearts")),
+				"indoors": bool(v.get("is_indoors")),
+				"activity": str(v.get("current_activity")),
+			})
+	var fest: Dictionary = _get_active_festival()
+	return {
+		"player_pos": p_pos,
+		"villagers": v_arr,
+		"tropeiro_present": _tropeiro_present,
+		"festival_name": str(fest.get("name", "")),
+	}
+
+
+func _gift_nearby_villager() -> void:
+	if _game_state == null or player == null or _current_location != "farm":
+		return
+	var v: CharacterBody2D = _find_nearby_villager(player.global_position, VILLAGER_INTERACT_REACH + 4.0)
+	if v == null:
+		return
+	if bool(v.get("gifted_today")):
+		_show_toast("%s já recebeu presente hoje!" % str(v.get("npc_name")))
+		_play_sfx("play_error")
+		return
+
+	var vid: String = str(v.get("npc_id"))
+	var favs: Array[String] = VillageDataScript.get_favorite_gifts(vid)
+	var chosen := _pick_and_consume_gift_item(favs)
+	if chosen.is_empty():
+		_show_toast("Sem itens na sacola para presentear! Colha, pesque ou produza algo.")
+		_play_sfx("play_error")
+		return
+
+	var item_name: String = str(chosen["name"])
+	var is_fav: bool = bool(chosen["favorite"])
+	var res: Dictionary = v.call("receive_gift", item_name, player.global_position, is_fav)
+	if bool(res.get("accepted", false)):
+		_play_sfx("play_harvest" if is_fav else "play_click")
+		_spawn_particles(v.global_position + Vector2(0.0, -8.0), Color(1.0, 0.42, 0.58))
+		var h_lbl: String = "+2 ♥ Favorito!" if is_fav else "+1 ♥ Presente!"
+		_spawn_floating_text(v.global_position + Vector2(0.0, -18.0), h_lbl, Color(1.0, 0.52, 0.65))
+		_show_toast("%s: \"%s\"" % [str(res.get("npc_name", "")), str(res.get("line", ""))])
+
+
+func _pick_and_consume_gift_item(favorites: Array[String]) -> Dictionary:
+	if _game_state == null:
+		return {}
+	var buckets: Array[Dictionary] = [
+		{"dict": _game_state.get("artisan"), "catalog": FarmCatalogScript.ARTISAN},
+		{"dict": _game_state.get("fish"), "catalog": FarmCatalogScript.FISH},
+		{"dict": _game_state.get("animal_products"), "catalog": FarmCatalogScript.ANIMAL_PRODUCTS},
+		{"dict": _game_state.get("harvested"), "catalog": _game_state.CROPS},
+	]
+	# 1. Tenta primeiro um item favorito que o jogador tenha na sacola
+	for fav_id in favorites:
+		for b in buckets:
+			var d_val: Variant = b["dict"]
+			if d_val is Dictionary:
+				var d := d_val as Dictionary
+				if int(d.get(fav_id, 0)) > 0:
+					d[fav_id] = int(d[fav_id]) - 1
+					if _game_state.has_signal("inventory_changed"):
+						_game_state.inventory_changed.emit()
+					var cat: Dictionary = b["catalog"]
+					var nm: String = str(cat.get(fav_id, {}).get("name", fav_id))
+					return {"id": fav_id, "name": nm, "favorite": true}
+	# 2. Caso contrário, entrega o primeiro item disponível da sacola
+	for b in buckets:
+		var d_val: Variant = b["dict"]
+		if d_val is Dictionary:
+			var d := d_val as Dictionary
+			for k in d.keys():
+				if int(d.get(k, 0)) > 0:
+					d[k] = int(d[k]) - 1
+					if _game_state.has_signal("inventory_changed"):
+						_game_state.inventory_changed.emit()
+					var cat: Dictionary = b["catalog"]
+					var nm: String = str(cat.get(k, {}).get("name", str(k)))
+					return {"id": str(k), "name": nm, "favorite": false}
+	return {}
 
 
 func _on_villager_indoors_changed(_npc_id: String, _inside: bool) -> void:
@@ -2695,6 +2909,9 @@ func _on_day_advanced(_new_day: int) -> void:
 			villager.call("reset_daily")
 
 	_sync_villagers(true)
+	var today_fest: Dictionary = _get_active_festival()
+	if not today_fest.is_empty():
+		_show_toast("HOJE É DIA DE FESTA! %s na Praça do Coreto (10h–21h)!" % str(today_fest.get("name", "")))
 	_sync_weather_fx()
 	_update_day_night_tint()
 
@@ -3174,7 +3391,8 @@ func _update_prompt_label(shop_open: bool) -> void:
 		var v_role: String = str(nearby_villager.get("role"))
 		var h_txt: String = str(nearby_villager.call("get_hearts_text")) if nearby_villager.has_method("get_hearts_text") else ""
 		var suffix: String = (" " + h_txt) if not h_txt.is_empty() else ""
-		hint = "[F] %s (%s)%s" % [v_name, v_role, suffix]
+		var gift_part: String = " | [G] Presentear" if not bool(nearby_villager.get("gifted_today")) else ""
+		hint = "[F] %s (%s)%s%s" % [v_name, v_role, suffix, gift_part]
 		anchor = nearby_villager.global_position + Vector2(0.0, -24.0)
 	elif not nearby_folklore_id.is_empty():
 		var f_info: Dictionary = StoryDataScript.FOLKLORE_INFO.get(nearby_folklore_id, {})
@@ -3452,6 +3670,8 @@ func _set_exterior_active(active: bool) -> void:
 
 	if _weather_fx != null and is_instance_valid(_weather_fx):
 		_weather_fx.visible = active
+	if _festival_decor != null and is_instance_valid(_festival_decor):
+		_festival_decor.visible = active and bool(_festival_decor.get("active"))
 	if _season_particles != null and is_instance_valid(_season_particles):
 		_season_particles.visible = active
 	if _firefly_particles != null and is_instance_valid(_firefly_particles):

@@ -10,6 +10,7 @@ const CropDataScript := preload("res://scripts/data/crop_data.gd")
 const FarmCatalogScript := preload("res://scripts/data/farm_catalog.gd")
 const SeasonDataScript := preload("res://scripts/data/season_data.gd")
 const StoryDataScript := preload("res://scripts/data/story_data.gd")
+const MinimapModalScript := preload("res://scripts/ui/minimap_modal.gd")
 
 const FALLBACK_VERSION := "v1.6.2"
 const FALLBACK_AUTHOR := "@marlonferreira1800-hue (Marlon Ferreira)"
@@ -215,6 +216,9 @@ var _menu_reset_confirm_box: PanelContainer
 
 var _touch_layer: Control
 var _touch_dir_active := Vector2.ZERO
+var _minimap_modal: Control = null
+var _minimap_open: bool = false
+var _minimap_refresh_acc: float = 0.0
 
 
 func _load_texture_safe(res_path: String) -> Texture2D:
@@ -246,8 +250,22 @@ func _ready() -> void:
 	_turnip_icon_texture = _load_texture_safe(TURNIP_ICON_PATH)
 
 	_build_ui()
+	_minimap_modal = MinimapModalScript.new() as Control
+	if _minimap_modal != null:
+		_minimap_modal.name = "MinimapModal"
+		if _minimap_modal.has_signal("close_requested"):
+			_minimap_modal.close_requested.connect(func() -> void: _set_minimap_open(false))
+		add_child(_minimap_modal)
 	_connect_signals()
 	_sync_all_from_state()
+
+
+func _process(delta: float) -> void:
+	if _minimap_open and _minimap_modal != null:
+		_minimap_refresh_acc += delta
+		if _minimap_refresh_acc >= 0.18:
+			_minimap_refresh_acc = 0.0
+			_refresh_minimap()
 
 
 func _input(event: InputEvent) -> void:
@@ -273,6 +291,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key_pressed: bool = key_event != null and key_event.pressed and not key_event.echo
 	var keycode: Key = key_event.keycode if key_pressed else KEY_NONE
 
+	if key_pressed and keycode == KEY_M:
+		_play_click()
+		toggle_minimap()
+		get_viewport().set_input_as_handled()
+		return
+
 	if (InputMap.has_action("toggle_changelog") and event.is_action_pressed("toggle_changelog")) or (key_pressed and keycode == KEY_V):
 		_play_click()
 		toggle_changelog()
@@ -281,7 +305,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if (InputMap.has_action("ui_cancel") and event.is_action_pressed("ui_cancel")) or (key_pressed and keycode == KEY_ESCAPE):
 		_play_click()
-		if _book_open:
+		if _minimap_open:
+			_set_minimap_open(false)
+		elif _book_open:
 			_set_book_open(false)
 		elif _changelog_open:
 			_set_changelog_open(false)
@@ -424,6 +450,7 @@ func close_all_modals() -> void:
 	_set_book_open(false)
 	_set_changelog_open(false)
 	_set_menu_open(false)
+	_set_minimap_open(false)
 	if _dialogue_open:
 		_dialogue_open = false
 		_dialogue_on_close = Callable()
@@ -432,7 +459,41 @@ func close_all_modals() -> void:
 
 
 func is_shop_open() -> bool:
-	return _shop_open or _changelog_open or _menu_open or _journal_open or _book_open or _dialogue_open
+	return _shop_open or _changelog_open or _menu_open or _journal_open or _book_open or _dialogue_open or _minimap_open
+
+
+func toggle_minimap() -> void:
+	_set_minimap_open(not _minimap_open)
+
+
+func _set_minimap_open(open: bool) -> void:
+	if open:
+		if _shop_open:
+			_set_shop_open(false)
+		if _journal_open:
+			_set_journal_open(false)
+		if _book_open:
+			_set_book_open(false)
+		if _changelog_open:
+			_set_changelog_open(false)
+		if _menu_open:
+			_set_menu_open(false)
+	_minimap_open = open
+	if _minimap_modal != null:
+		_minimap_modal.visible = _minimap_open
+	if _minimap_open:
+		_minimap_refresh_acc = 0.0
+		_refresh_minimap()
+
+
+func _refresh_minimap() -> void:
+	if _minimap_modal == null:
+		return
+	var parent := get_parent()
+	if parent != null and parent.has_method("get_minimap_snapshot"):
+		var snap: Variant = parent.call("get_minimap_snapshot")
+		if snap is Dictionary and _minimap_modal.has_method("update_snapshot"):
+			_minimap_modal.call("update_snapshot", snap as Dictionary)
 
 
 func open_storybook(chapter_id: String = "") -> void:

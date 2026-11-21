@@ -18,6 +18,7 @@ var dialogues: Dictionary = {}
 
 var hearts: int = 0
 var talked_today: bool = false
+var gifted_today: bool = false
 var perk_used_today: bool = false
 var is_indoors: bool = false
 var current_activity: String = ""
@@ -156,7 +157,7 @@ func _load_texture_safe(res_path: String) -> Texture2D:
 	return null
 
 
-func sync_to_time(time_minutes: float, is_rainy: bool, instant: bool = false) -> void:
+func sync_to_time(time_minutes: float, is_rainy: bool, instant: bool = false, festival: Dictionary = {}) -> void:
 	if schedule.is_empty():
 		return
 
@@ -170,9 +171,17 @@ func sync_to_time(time_minutes: float, is_rainy: bool, instant: bool = false) ->
 	var want_node: String = str(entry.get("node", home_node_id))
 	var want_indoors: bool = bool(entry.get("indoors", false))
 	var act_name: String = str(entry.get("activity", "Passeando"))
+	var use_chatter: Variant = entry.get("chatter", [])
 
+	# Em dia de Festa Sazonal (10h às 21h), todos os moradores se reúnem na Praça do Coreto!
+	if not festival.is_empty() and time_minutes >= 600.0 and time_minutes < 1260.0:
+		chosen_idx = 99
+		want_node = str(festival.get("spot", "praca_s"))
+		want_indoors = false
+		act_name = str(festival.get("name", "Festa na Praça"))
+		use_chatter = festival.get("chatter", [])
 	# Em dias de chuva, moradores que não estão trabalhando abrigam-se em casa à tarde/noite
-	if is_rainy and not want_indoors and bool(entry.get("shelter_in_rain", false)):
+	elif is_rainy and not want_indoors and bool(entry.get("shelter_in_rain", false)):
 		want_node = home_node_id
 		want_indoors = true
 		act_name = "Abrigado da chuva"
@@ -185,9 +194,8 @@ func sync_to_time(time_minutes: float, is_rainy: bool, instant: bool = false) ->
 	_target_indoors = want_indoors
 	current_activity = act_name
 	_active_chatter.clear()
-	var ch_val: Variant = entry.get("chatter", [])
-	if ch_val is Array:
-		for line in (ch_val as Array):
+	if use_chatter is Array:
+		for line in (use_chatter as Array):
 			_active_chatter.append(str(line))
 
 	var dest_pos: Vector2 = _get_node_pos(want_node)
@@ -381,6 +389,52 @@ func interact(player_pos: Vector2, time_minutes: float, is_rainy: bool, season_i
 	}
 
 
+func receive_gift(item_name: String, player_pos: Vector2, is_favorite: bool) -> Dictionary:
+	face_toward(player_pos)
+	_talk_pause_timer = 3.2
+	_is_wandering = false
+	if gifted_today:
+		show_bubble("Já recebi presente hoje!", 2.4)
+		return {"accepted": false, "gained": 0, "hearts": hearts, "npc_name": npc_name, "line": "Já recebi seu presente hoje, muito obrigado!"}
+
+	gifted_today = true
+	var delta_hearts: int = 2 if is_favorite else 1
+	var old_hearts: int = hearts
+	hearts = mini(5, hearts + delta_hearts)
+	var actual_gain: int = hearts - old_hearts
+
+	var line: String = ""
+	if is_favorite:
+		line = "Nossa, %s é o meu favorito! Muito obrigado, vizinho!" % item_name
+		show_bubble("Amei o %s! ♥♥" % item_name, 3.2)
+	else:
+		line = "Que gentileza! Muito obrigado por este %s!" % item_name
+		show_bubble("Obrigado pelo %s! ♥" % item_name, 3.0)
+
+	if _heart_badge != null:
+		_heart_badge.text = "♥♥" if is_favorite else "♥"
+		_heart_badge.visible = true
+		_heart_badge.position = Vector2(-14.0, -24.0)
+		_heart_badge.modulate.a = 1.0
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(_heart_badge, "position:y", -36.0, 0.95)
+		tw.tween_property(_heart_badge, "modulate:a", 0.0, 0.95)
+		tw.chain().tween_callback(func() -> void:
+			if is_instance_valid(_heart_badge):
+				_heart_badge.visible = false
+		)
+
+	return {
+		"accepted": true,
+		"is_favorite": is_favorite,
+		"gained": actual_gain,
+		"hearts": hearts,
+		"npc_name": npc_name,
+		"line": line,
+	}
+
+
 func get_hearts_text() -> String:
 	var out: String = ""
 	for i in range(hearts):
@@ -390,6 +444,7 @@ func get_hearts_text() -> String:
 
 func reset_daily() -> void:
 	talked_today = false
+	gifted_today = false
 	perk_used_today = false
 
 
@@ -398,6 +453,7 @@ func export_state() -> Dictionary:
 		"id": npc_id,
 		"hearts": hearts,
 		"talked_today": talked_today,
+		"gifted_today": gifted_today,
 		"perk_used_today": perk_used_today,
 	}
 
@@ -405,6 +461,7 @@ func export_state() -> Dictionary:
 func restore_state(data: Dictionary) -> void:
 	hearts = clampi(int(data.get("hearts", 0)), 0, 5)
 	talked_today = bool(data.get("talked_today", false))
+	gifted_today = bool(data.get("gifted_today", false))
 	perk_used_today = bool(data.get("perk_used_today", false))
 
 
