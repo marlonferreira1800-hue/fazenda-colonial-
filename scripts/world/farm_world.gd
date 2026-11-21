@@ -7,6 +7,8 @@ const FarmCatalogScript := preload("res://scripts/data/farm_catalog.gd")
 const SeasonDataScript := preload("res://scripts/data/season_data.gd")
 const VillageDataScript := preload("res://scripts/data/village_data.gd")
 const VillagerScript := preload("res://scripts/world/villager.gd")
+const StoryDataScript := preload("res://scripts/data/story_data.gd")
+const VillageWorldScript := preload("res://scripts/world/village_world.gd")
 
 const TILE_SIZE: int = 16
 const MAP_WIDTH: int = 68
@@ -46,6 +48,12 @@ const HOUSE_DOOR_TILES: Array[Vector2i] = [
 	Vector2i(8, 5),
 ]
 const HOUSE_ORIGIN := Vector2(2000.0, 0.0)
+const VILLAGE_ORIGIN := Vector2(2800.0, 0.0)
+const VILLAGE_EXIT_FARM_POS := Vector2(288.0, 520.0)
+const SACI_POS := Vector2(158.0, 224.0)
+const MULA_POS := Vector2(256.0, 332.0)
+const CURUPIRA_POS := Vector2(312.0, 52.0)
+const IARA_POS := Vector2(468.0, 266.0)
 const ANIMAL_PEN_BOUNDS := Rect2(456.0, 88.0, 112.0, 64.0)
 
 const FARM_GUIDE_TIPS: Array[String] = [
@@ -123,6 +131,8 @@ var _capela_blessed_today: bool = false
 var _lamp_glows: Array[Sprite2D] = []
 var _tropeiro_body: StaticBody2D = null
 var _tropeiro_present: bool = false
+var _village_world: Node2D = null
+var _folklore_nodes: Dictionary = {}
 var _guide_tip_index: int = 0
 var _entered_house_once: bool = false
 var _rng := RandomNumberGenerator.new()
@@ -360,6 +370,7 @@ func _ready() -> void:
 	_spawn_animals()
 	_spawn_villagers()
 	_setup_house_interior()
+	_setup_village_world()
 
 	if player != null:
 		player.global_position = Vector2(136.0, 118.0)
@@ -449,9 +460,14 @@ func _process(delta: float) -> void:
 			var p_pos: Vector2 = player.global_position
 			if moving_up and absf(p_pos.x - HOUSE_DOOR_POS.x) <= 9.5 and p_pos.y <= 99.0 and p_pos.y >= 88.0:
 				_enter_house()
+			elif moving_down and absf(p_pos.x - 288.0) <= 24.0 and p_pos.y >= 544.0:
+				_enter_village()
 		elif _current_location == "house" and _house_interior != null:
 			if moving_down and bool(_house_interior.call("is_at_exit_threshold", player.global_position)):
 				_exit_house()
+		elif _current_location == "village" and _village_world != null:
+			if moving_up and bool(_village_world.call("is_at_exit_threshold", player.global_position)):
+				_exit_village()
 
 	if _current_location == "farm":
 		_update_region_banner()
@@ -553,6 +569,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if _is_shop_open():
+		if hud != null and hud.has_method("is_dialogue_open") and bool(hud.call("is_dialogue_open")):
+			if event.is_action_pressed("action_interact") or event.is_action_pressed("action_use") or event.is_action_pressed("ui_accept"):
+				hud.call("advance_dialogue")
+				get_viewport().set_input_as_handled()
+				return
 		if event.is_action_pressed("ui_cancel") and hud != null:
 			if hud.has_method("close_all_modals"):
 				hud.call("close_all_modals")
@@ -565,6 +586,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _game_state != null:
 			_game_state.call("advance_day")
 		get_viewport().set_input_as_handled()
+		return
+
+	if _current_location == "village":
+		if event.is_action_pressed("action_interact") or event.is_action_pressed("action_use"):
+			_handle_village_interact()
+			get_viewport().set_input_as_handled()
+			return
 		return
 
 	if _current_location == "house":
@@ -1183,6 +1211,30 @@ func _spawn_buildings_and_props() -> void:
 		t_badge.z_index = 8
 		_tropeiro_body.add_child(t_badge)
 
+	# Entidades do Folclore Brasileiro (aparecem conforme o horário do dia)
+	var folklore_specs: Array[Dictionary] = [
+		{"id": "saci", "tex": "res://assets/sprites/colonial_buildings_px/saci_perere.png", "pos": SACI_POS, "off": Vector2(0.0, -10.0), "col": Rect2(0.0, -4.0, 14.0, 10.0)},
+		{"id": "mula", "tex": "res://assets/sprites/colonial_buildings_px/mula_sem_cabeca.png", "pos": MULA_POS, "off": Vector2(0.0, -12.0), "col": Rect2(0.0, -4.0, 24.0, 12.0)},
+		{"id": "curupira", "tex": "res://assets/sprites/colonial_buildings_px/curupira.png", "pos": CURUPIRA_POS, "off": Vector2(0.0, -10.0), "col": Rect2(0.0, -4.0, 14.0, 10.0)},
+		{"id": "iara", "tex": "res://assets/sprites/colonial_buildings_px/iara_lago.png", "pos": IARA_POS, "off": Vector2(0.0, -10.0), "col": Rect2(0.0, -4.0, 16.0, 10.0)},
+	]
+	_folklore_nodes.clear()
+	for fs in folklore_specs:
+		var fid: String = str(fs["id"])
+		var f_body := _spawn_colonial_building("Folklore_%s" % fid, str(fs["tex"]), fs["pos"], fs["off"], fs["col"])
+		if f_body != null:
+			if _v13_props_texture != null:
+				var fb := Sprite2D.new()
+				var fa := AtlasTexture.new()
+				fa.atlas = _v13_props_texture
+				fa.region = Rect2(96, 16, 16, 16)
+				fb.texture = fa
+				fb.position = Vector2(0.0, -22.0)
+				fb.scale = Vector2(0.7, 0.7)
+				fb.z_index = 8
+				f_body.add_child(fb)
+			_folklore_nodes[fid] = f_body
+
 	# Palmeiras Imperiais (símbolo das sedes de fazendas e praças coloniais)
 	var palm_positions: Array[Vector2] = [
 		Vector2(6.0 * TILE_SIZE + 4.0, 7.5 * TILE_SIZE),
@@ -1646,6 +1698,51 @@ func _refresh_tropeiro_presence() -> void:
 				(child as CollisionShape2D).disabled = not _tropeiro_present
 
 
+func _is_folklore_active_now(fid: String, mins: float) -> bool:
+	match fid:
+		"saci":
+			return mins >= 720.0 and mins < 1080.0
+		"curupira":
+			return mins >= 360.0 and mins < 1020.0
+		"iara":
+			return mins >= 960.0 and mins < 1200.0
+		"mula":
+			return mins >= 1140.0 or mins < 120.0
+	return false
+
+
+func _refresh_folklore_visibility() -> void:
+	var mins: float = float(_game_state.get("time_minutes")) if _game_state != null else 480.0
+	for fid_var in _folklore_nodes.keys():
+		var fid: String = str(fid_var)
+		var body: StaticBody2D = _folklore_nodes[fid] as StaticBody2D
+		if body == null or not is_instance_valid(body):
+			continue
+		var show_it: bool = (_current_location == "farm") and _is_folklore_active_now(fid, mins)
+		body.visible = show_it
+		for child in body.get_children():
+			if child is CollisionShape2D:
+				(child as CollisionShape2D).disabled = not show_it
+
+
+func _interact_with_story_entity(entity_id: String) -> void:
+	if _game_state == null:
+		return
+	var res: Dictionary = _game_state.call("interact_story_entity", entity_id, _capela_blessed_today)
+	if res.is_empty():
+		return
+	var speaker: String = str(res.get("speaker", entity_id))
+	var lines: Array = res.get("lines", [])
+	var open_shop: bool = bool(res.get("open_shop", false))
+	if bool(res.get("quest_completed", false)) and player != null:
+		_spawn_particles(player.global_position, Color(1.0, 0.90, 0.35))
+	var on_close := Callable()
+	if open_shop and hud != null and hud.has_method("toggle_shop"):
+		on_close = Callable(hud, "toggle_shop")
+	if hud != null and hud.has_method("show_dialogue"):
+		hud.call("show_dialogue", speaker, lines, on_close)
+
+
 func _spawn_animals() -> void:
 	for a in _animals:
 		if is_instance_valid(a):
@@ -1872,6 +1969,15 @@ func _handle_interact() -> void:
 		else:
 			_show_toast("Capela da Fazenda: Bênção já ativa hoje (+15% Ouro ★).")
 		return
+
+	# Check proximity to visible Brazilian Folklore entities
+	for fid_var in _folklore_nodes.keys():
+		var fid: String = str(fid_var)
+		var f_body: StaticBody2D = _folklore_nodes[fid] as StaticBody2D
+		if f_body != null and is_instance_valid(f_body) and f_body.visible:
+			if p_pos.distance_to(f_body.global_position) <= 34.0:
+				_interact_with_story_entity(fid)
+				return
 
 	# Check proximity to Tropeiro Itinerante -> sell basket (+50% Pedido da Corte / +25% resto)
 	if _tropeiro_present and p_pos.distance_to(_tile_center(TROPEIRO_TILE)) <= 34.0:
@@ -2221,7 +2327,8 @@ func _start_fishing_minigame(water_tile: Vector2i) -> void:
 	_fishing_active = true
 	_fishing_phase = 0.0
 	var bonus_wide: bool = _game_state != null and bool(_game_state.call("has_album_bonus", "fish"))
-	var zone_width_frac: float = 0.38 if bonus_wide else 0.28
+	var iara_wide: bool = _game_state != null and _game_state.has_method("has_iara_blessing") and bool(_game_state.call("has_iara_blessing"))
+	var zone_width_frac: float = (0.38 if bonus_wide else 0.28) + (0.10 if iara_wide else 0.0)
 	var center: float = _rng.randf_range(0.28, 0.72)
 	_fishing_zone_min = clampf(center - zone_width_frac * 0.5, 0.05, 0.90)
 	_fishing_zone_max = clampf(_fishing_zone_min + zone_width_frac, 0.15, 0.95)
@@ -2954,12 +3061,13 @@ func _update_day_night_tint() -> void:
 			glow.visible = want_lamps
 			glow.modulate.a = lamp_alpha
 	_refresh_window_glows()
+	_refresh_folklore_visibility()
 
 
 func _update_target_cursor(shop_open: bool) -> void:
 	if tile_cursor == null or player == null:
 		return
-	if shop_open or _current_location == "house" or _is_transitioning:
+	if shop_open or _current_location == "house" or _current_location == "village" or _is_transitioning:
 		tile_cursor.visible = false
 		for extra in _extra_cursor_rects:
 			extra.visible = false
@@ -3016,6 +3124,21 @@ func _update_prompt_label(shop_open: bool) -> void:
 	var hint: String = ""
 	var anchor: Vector2 = p_pos + Vector2(0.0, -24.0)
 
+	if _current_location == "village":
+		if _village_world != null:
+			var near_v: Dictionary = _village_world.call("get_nearest_interactable", p_pos)
+			if not near_v.is_empty():
+				hint = str(near_v.get("prompt", ""))
+				anchor = near_v.get("anchor", p_pos + Vector2(0.0, -24.0))
+		if hint.is_empty():
+			_prompt_label.visible = false
+		else:
+			_prompt_label.visible = true
+			_prompt_label.text = hint
+			_prompt_label.reset_size()
+			_prompt_label.global_position = anchor - Vector2(_prompt_label.size.x * 0.5, 0.0)
+		return
+
 	if _current_location == "house":
 		if _house_interior != null:
 			var near_obj: Dictionary = _house_interior.call("get_nearest_interactable", p_pos)
@@ -3035,6 +3158,17 @@ func _update_prompt_label(shop_open: bool) -> void:
 	var nearby_animal: CharacterBody2D = _find_nearby_animal(p_pos, ANIMAL_INTERACT_REACH)
 	var nearby_machine: String = _find_nearby_machine(p_pos)
 
+	var nearby_folklore_id: String = ""
+	var nearby_folklore_pos: Vector2 = Vector2.ZERO
+	for fid_var in _folklore_nodes.keys():
+		var fid: String = str(fid_var)
+		var f_body: StaticBody2D = _folklore_nodes[fid] as StaticBody2D
+		if f_body != null and is_instance_valid(f_body) and f_body.visible:
+			if p_pos.distance_to(f_body.global_position) <= 34.0:
+				nearby_folklore_id = fid
+				nearby_folklore_pos = f_body.global_position
+				break
+
 	if nearby_villager != null:
 		var v_name: String = str(nearby_villager.get("npc_name"))
 		var v_role: String = str(nearby_villager.get("role"))
@@ -3042,6 +3176,10 @@ func _update_prompt_label(shop_open: bool) -> void:
 		var suffix: String = (" " + h_txt) if not h_txt.is_empty() else ""
 		hint = "[F] %s (%s)%s" % [v_name, v_role, suffix]
 		anchor = nearby_villager.global_position + Vector2(0.0, -24.0)
+	elif not nearby_folklore_id.is_empty():
+		var f_info: Dictionary = StoryDataScript.FOLKLORE_INFO.get(nearby_folklore_id, {})
+		hint = "[F] Conversar com %s" % str(f_info.get("name", nearby_folklore_id))
+		anchor = nearby_folklore_pos + Vector2(0.0, -24.0)
 	elif p_pos.distance_to(HOUSE_DOOR_POS) <= 28.0:
 		hint = "[F] Entrar na Casa"
 		anchor = HOUSE_DOOR_POS + Vector2(0.0, -24.0)
@@ -3081,6 +3219,9 @@ func _update_prompt_label(shop_open: bool) -> void:
 	elif p_pos.distance_to(_tile_center(CAPELA_TILE)) <= 34.0:
 		hint = "[F] Bênção da Capela (+15% Ouro)" if not _capela_blessed_today else "[F] Orar na Capela"
 		anchor = _tile_center(CAPELA_TILE) + Vector2(0.0, -28.0)
+	elif absf(p_pos.x - 288.0) <= 26.0 and p_pos.y >= 336.0:
+		hint = "[↓] Atravessar Porteira -> Vila Colonial"
+		anchor = Vector2(288.0, 340.0)
 	elif _tropeiro_present and p_pos.distance_to(_tile_center(TROPEIRO_TILE)) <= 34.0:
 		var feat: Dictionary = _game_state.call("get_tropeiro_featured_item") if _game_state != null else {}
 		var feat_name: String = str(feat.get("name", "Artesanal"))
@@ -3327,34 +3468,104 @@ func _set_exterior_active(active: bool) -> void:
 			villager.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
 
 	if _house_interior != null and is_instance_valid(_house_interior):
-		_house_interior.visible = not active
-		_house_interior.process_mode = Node.PROCESS_MODE_DISABLED if active else Node.PROCESS_MODE_INHERIT
+		var show_house: bool = (_current_location == "house")
+		_house_interior.visible = show_house
+		_house_interior.process_mode = Node.PROCESS_MODE_INHERIT if show_house else Node.PROCESS_MODE_DISABLED
 
 
 func _apply_location_state(loc: String, target_pos: Vector2, facing: Vector2i) -> void:
 	_current_location = loc
-	var inside: bool = (loc == "house")
-	_set_exterior_active(not inside)
+	var inside_house: bool = (loc == "house")
+	var in_village: bool = (loc == "village")
+	_set_exterior_active(loc == "farm")
+	if _village_world != null and is_instance_valid(_village_world):
+		_village_world.visible = in_village
+		_village_world.process_mode = Node.PROCESS_MODE_INHERIT if in_village else Node.PROCESS_MODE_DISABLED
 
 	if player != null:
-		var target_parent: Node = _house_interior if (inside and _house_interior != null) else self
+		var target_parent: Node = self
+		if inside_house and _house_interior != null:
+			target_parent = _house_interior
+		elif in_village and _village_world != null:
+			target_parent = _village_world
 		if player.get_parent() != target_parent:
 			player.reparent(target_parent, true)
 		player.global_position = target_pos
 		player.set("facing_dir", facing)
 		if player.has_method("_update_animation"):
 			player.call("_update_animation", 0.0, Vector2.ZERO)
-		if inside and _house_interior != null:
+		if inside_house and _house_interior != null:
 			var cam_b: Rect2i = _house_interior.call("get_camera_bounds")
 			var walk_b: Rect2 = _house_interior.call("get_walk_bounds")
 			if player.has_method("set_camera_and_walk_bounds"):
 				player.call("set_camera_and_walk_bounds", cam_b, walk_b)
+		elif in_village and _village_world != null:
+			var v_cam: Rect2i = _village_world.call("get_camera_bounds")
+			if player.has_method("set_camera_limits"):
+				player.call("set_camera_limits", v_cam)
 		elif player.has_method("set_camera_limits"):
 			player.call("set_camera_limits", Rect2i(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE))
 		if player.has_method("snap_camera"):
 			player.call("snap_camera")
 
 	_update_day_night_tint()
+
+
+func _setup_village_world() -> void:
+	if _village_world != null and is_instance_valid(_village_world):
+		_village_world.queue_free()
+	_village_world = VillageWorldScript.new()
+	_village_world.name = "VillageWorld"
+	_village_world.position = VILLAGE_ORIGIN
+	_village_world.visible = false
+	_village_world.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(_village_world)
+
+
+func _enter_village(instant: bool = false) -> void:
+	if _village_world == null or (_is_transitioning and not instant):
+		return
+	var spawn_pos: Vector2 = _village_world.call("get_spawn_world_pos")
+	if instant:
+		_apply_location_state("village", spawn_pos, Vector2i(0, 1))
+		_door_cooldown = 0.45
+		return
+	if _current_location == "village":
+		return
+	_play_sfx("play_door")
+	_run_fade_transition(func() -> void:
+		_apply_location_state("village", spawn_pos, Vector2i(0, 1))
+		_show_toast("Bem-vindo à Vila Colonial! Converse com os moradores com [F].")
+	)
+
+
+func _exit_village(instant: bool = false) -> void:
+	if _is_transitioning and not instant:
+		return
+	if instant:
+		_apply_location_state("farm", VILLAGE_EXIT_FARM_POS, Vector2i(0, -1))
+		_door_cooldown = 0.45
+		return
+	if _current_location != "village":
+		return
+	_play_sfx("play_door")
+	_run_fade_transition(func() -> void:
+		_apply_location_state("farm", VILLAGE_EXIT_FARM_POS, Vector2i(0, -1))
+	)
+
+
+func _handle_village_interact() -> void:
+	if _village_world == null or player == null:
+		return
+	var near_v: Dictionary = _village_world.call("get_nearest_interactable", player.global_position)
+	if near_v.is_empty():
+		return
+	var kind: String = str(near_v.get("kind", ""))
+	var obj_id: String = str(near_v.get("id", ""))
+	if kind == "npc":
+		_interact_with_story_entity(obj_id)
+	elif kind == "fountain":
+		_refill_watering_can()
 
 
 func _run_fade_transition(on_midpoint: Callable) -> void:
@@ -3493,8 +3704,11 @@ func _interact_with_house_object(obj: Dictionary) -> void:
 			_show_toast("Lareira quentinha crepitando...")
 		"bookshelf":
 			_play_sfx("play_click")
-			_show_toast(FARM_GUIDE_TIPS[_guide_tip_index])
-			_guide_tip_index = (_guide_tip_index + 1) % FARM_GUIDE_TIPS.size()
+			if hud != null and hud.has_method("open_storybook"):
+				hud.call("open_storybook")
+			else:
+				_show_toast(FARM_GUIDE_TIPS[_guide_tip_index])
+				_guide_tip_index = (_guide_tip_index + 1) % FARM_GUIDE_TIPS.size()
 		"desk":
 			_play_sfx("play_cozy")
 			_game_state.call("save_game", true)

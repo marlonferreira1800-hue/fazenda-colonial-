@@ -331,7 +331,7 @@ func _build_furniture_and_interactables() -> void:
 	)
 	_register_interactable(
 		"bookshelf",
-		"[F] Ler Guia da Fazenda",
+		"[F] Livro do Sítio",
 		Vector2(200.0, 48.0),
 		Vector2(200.0, 18.0),
 		28.0,

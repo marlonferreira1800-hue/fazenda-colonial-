@@ -21,7 +21,9 @@ signal album_changed()
 signal machines_changed()
 signal animal_purchased(animal_type: String)
 signal game_reset()
+const StoryDataScript := preload("res://scripts/data/story_data.gd")
 signal season_changed(season_id: String, year: int)
+signal story_changed()
 
 const SAVE_PATH := "user://savegame.json"
 const MINUTES_PER_DAY: float = 1440.0
@@ -141,6 +143,16 @@ var artisan: Dictionary = {
 var supplies: Dictionary = {
 	"fertilizer": 2,
 }
+var story_quests: Dictionary = {}
+var npc_hearts: Dictionary = {
+	"padre": 0,
+	"ferreiro": 0,
+	"quiteria": 0,
+}
+var npc_talked_today: Dictionary = {}
+var folklore_discovered: Array[String] = []
+var book_chapters_read: Array[String] = []
+var book_bonus_claimed_today: bool = false
 var gold_items: Dictionary = {}
 
 var owned_machines: Dictionary = {
@@ -600,7 +612,8 @@ func sell_all_harvested(bonus_mult: float = 1.0, source_label: String = "", feat
 		return 0
 
 	var base_profit: int = get_total_basket_value()
-	var total_profit: int = roundi(float(base_profit) * maxf(1.0, bonus_mult))
+	var saci_mult: float = 1.10 if has_saci_amulet() else 1.0
+	var total_profit: int = roundi(float(base_profit) * maxf(1.0, bonus_mult) * saci_mult)
 	var featured_bonus: int = 0
 	if not featured_id.is_empty() and ARTISAN.has(featured_id):
 		var feat_qty: int = int(artisan.get(featured_id, 0))
@@ -661,6 +674,226 @@ func process_terreiro_secagem() -> String:
 			save_game(false)
 		return "saca_cafe"
 	return "no_input"
+
+
+func has_saci_amulet() -> bool:
+	return str(story_quests.get("trato_do_redemoinho", "")) == "completed"
+
+
+func has_iara_blessing() -> bool:
+	return str(story_quests.get("canto_mae_dagua", "")) == "completed"
+
+
+func _record_folklore_discovery(entity_id: String) -> void:
+	if StoryDataScript.FOLKLORE_INFO.has(entity_id) and not folklore_discovered.has(entity_id):
+		folklore_discovered.append(entity_id)
+		story_changed.emit()
+
+
+func _can_fulfill_quest(q_def: Dictionary, capela_blessed: bool) -> bool:
+	var req_type: String = str(q_def.get("req_type", ""))
+	var req_id: String = str(q_def.get("req_id", ""))
+	var req_qty: int = int(q_def.get("req_qty", 1))
+	match req_type:
+		"artisan":
+			return int(artisan.get(req_id, 0)) >= req_qty
+		"capela_blessed":
+			return capela_blessed
+		"curupira_offering":
+			return int(harvested.get("corn", 0)) >= 2 or int(artisan.get("honey", 0)) >= 1
+		"any_fish":
+			for qty in fish.values():
+				if int(qty) >= 1:
+					return true
+			return false
+	return false
+
+
+func _consume_quest_requirement(q_def: Dictionary) -> void:
+	var req_type: String = str(q_def.get("req_type", ""))
+	var req_id: String = str(q_def.get("req_id", ""))
+	var req_qty: int = int(q_def.get("req_qty", 1))
+	match req_type:
+		"artisan":
+			artisan[req_id] = maxi(0, int(artisan.get(req_id, 0)) - req_qty)
+		"curupira_offering":
+			if int(harvested.get("corn", 0)) >= 2:
+				harvested["corn"] = int(harvested["corn"]) - 2
+			elif int(artisan.get("honey", 0)) >= 1:
+				artisan["honey"] = int(artisan["honey"]) - 1
+		"any_fish":
+			for fk in fish.keys():
+				if int(fish[fk]) >= 1:
+					fish[fk] = int(fish[fk]) - 1
+					break
+
+
+func interact_story_entity(entity_id: String, capela_blessed: bool = false) -> Dictionary:
+	var audio := _get_audio()
+	_record_folklore_discovery(entity_id)
+
+	var is_villager: bool = StoryDataScript.VILLAGERS.has(entity_id)
+	var heart_gained: bool = false
+	if is_villager and not bool(npc_talked_today.get(entity_id, false)):
+		npc_talked_today[entity_id] = true
+		npc_hearts[entity_id] = mini(5, int(npc_hearts.get(entity_id, 0)) + 1)
+		heart_gained = true
+		story_changed.emit()
+
+	var quest_id: String = ""
+	if is_villager:
+		quest_id = str((StoryDataScript.VILLAGERS[entity_id] as Dictionary).get("quest_id", ""))
+	elif StoryDataScript.FOLKLORE_INFO.has(entity_id):
+		quest_id = str((StoryDataScript.FOLKLORE_INFO[entity_id] as Dictionary).get("quest_id", ""))
+
+	if not quest_id.is_empty() and StoryDataScript.QUESTS.has(quest_id):
+		var q_def: Dictionary = StoryDataScript.QUESTS[quest_id]
+		var state: String = str(story_quests.get(quest_id, ""))
+		var speaker: String = str(q_def.get("giver_name", entity_id))
+
+		if state != "completed":
+			if _can_fulfill_quest(q_def, capela_blessed):
+				_consume_quest_requirement(q_def)
+				story_quests[quest_id] = "completed"
+				var rew_money: int = int(q_def.get("reward_money", 0))
+				if rew_money > 0:
+					money += rew_money
+					money_changed.emit(money)
+				if quest_id == "pao_da_matriz":
+					npc_hearts["padre"] = mini(5, int(npc_hearts.get("padre", 0)) + 2)
+				elif quest_id == "fogo_estrada_real":
+					max_stamina += 15
+					stamina = mini(max_stamina, stamina + 15)
+					stamina_changed.emit(stamina, max_stamina)
+				elif quest_id == "guardiao_da_mata":
+					supplies["fertilizer"] = int(supplies.get("fertilizer", 0)) + 5
+				inventory_changed.emit()
+				story_changed.emit()
+				if audio != null and audio.has_method("play_order_done"):
+					audio.play_order_done()
+				if auto_save_enabled:
+					save_game(false)
+				return {
+					"speaker": speaker,
+					"lines": q_def.get("complete_lines", []),
+					"quest_completed": true,
+					"open_shop": false,
+				}
+			elif state == "":
+				story_quests[quest_id] = "active"
+				story_changed.emit()
+				if audio != null and audio.has_method("play_cozy"):
+					audio.play_cozy()
+				if auto_save_enabled:
+					save_game(false)
+				return {
+					"speaker": speaker,
+					"lines": q_def.get("intro_lines", []),
+					"quest_completed": false,
+					"open_shop": false,
+				}
+			else:
+				if audio != null and audio.has_method("play_click"):
+					audio.play_click()
+				return {
+					"speaker": speaker,
+					"lines": q_def.get("reminder_lines", []),
+					"quest_completed": false,
+					"open_shop": false,
+				}
+
+	if is_villager:
+		var v_def: Dictionary = StoryDataScript.VILLAGERS[entity_id]
+		var hearts: int = int(npc_hearts.get(entity_id, 0))
+		var v_lines: Array = v_def.get("lines", ["Olá, lavrador!"])
+		var line_idx: int = clampi(hearts / 2, 0, v_lines.size() - 1)
+		var out_lines: Array[String] = [str(v_lines[line_idx])]
+		if heart_gained:
+			out_lines.append("(Amizade com %s subiu para %d/5 ♥)" % [str(v_def["name"]), hearts])
+		if audio != null and audio.has_method("play_cozy"):
+			audio.play_cozy()
+		if auto_save_enabled and heart_gained:
+			save_game(false)
+		return {
+			"speaker": "%s (%d/5 ♥)" % [str(v_def["name"]), hearts],
+			"lines": out_lines,
+			"quest_completed": false,
+			"open_shop": entity_id in ["ferreiro", "quiteria"],
+		}
+
+	if StoryDataScript.FOLKLORE_INFO.has(entity_id):
+		var f_def: Dictionary = StoryDataScript.FOLKLORE_INFO[entity_id]
+		if audio != null and audio.has_method("play_cozy"):
+			audio.play_cozy()
+		return {
+			"speaker": str(f_def["name"]),
+			"lines": ["Sua amizade com as lendas desta terra protege a fazenda colonial!"],
+			"quest_completed": false,
+			"open_shop": false,
+		}
+	return {}
+
+
+func is_book_chapter_unlocked(chapter_id: String) -> bool:
+	if not StoryDataScript.BOOK_CHAPTERS.has(chapter_id):
+		return false
+	var ch: Dictionary = StoryDataScript.BOOK_CHAPTERS[chapter_id]
+	var utype: String = str(ch.get("unlock_type", "always"))
+	match utype:
+		"always":
+			return true
+		"item":
+			var req_item: String = str(ch.get("unlock_req", ""))
+			return bool(album_discovered.get(req_item, false)) or int(harvested.get(req_item, 0)) > 0
+		"folklore":
+			var req_fk: String = str(ch.get("unlock_req", ""))
+			return folklore_discovered.has(req_fk)
+		"folklore_any":
+			var req_arr = ch.get("unlock_req", [])
+			if req_arr is Array:
+				for fk in req_arr:
+					if folklore_discovered.has(str(fk)):
+						return true
+			return false
+		"quest_or_artisan":
+			for st in story_quests.values():
+				if str(st) == "completed":
+					return true
+			for a_id in artisan.keys():
+				if bool(album_discovered.get(str(a_id), false)) or int(artisan.get(a_id, 0)) > 0:
+					return true
+			return false
+	return false
+
+
+func get_unlocked_book_count() -> int:
+	var count: int = 0
+	for cid in StoryDataScript.BOOK_CHAPTER_ORDER:
+		if is_book_chapter_unlocked(cid):
+			count += 1
+	return count
+
+
+func mark_book_chapter_read(chapter_id: String) -> Dictionary:
+	if not is_book_chapter_unlocked(chapter_id):
+		return {"bonus_granted": false, "first_read": false}
+	var first_read: bool = false
+	if not book_chapters_read.has(chapter_id):
+		book_chapters_read.append(chapter_id)
+		first_read = true
+	var bonus_granted: bool = false
+	if not book_bonus_claimed_today:
+		book_bonus_claimed_today = true
+		bonus_granted = true
+		stamina = mini(max_stamina, stamina + 10)
+		stamina_changed.emit(stamina, max_stamina)
+		var audio := get_node_or_null("/root/AudioManager")
+		if audio != null and audio.has_method("play_cozy"):
+			audio.play_cozy()
+		emit_toast("Leitura do Sítio! +10 Energia de aconchego.")
+	if first_read or bonus_granted:
+		story_changed.emit()
+	return {"bonus_granted": bonus_granted, "first_read": first_read}
 
 
 func start_machine(machine_id: String) -> String:
@@ -851,6 +1084,8 @@ func set_touch_mode(mode: String) -> void:
 
 
 func advance_day() -> void:
+	npc_talked_today.clear()
+	book_bonus_claimed_today = false
 	day += 1
 	time_minutes = START_OF_DAY_MINUTES
 	_last_emitted_minute = int(time_minutes)
@@ -1070,6 +1305,11 @@ func save_game(show_toast: bool = true) -> bool:
 		"machine_states": machine_states.duplicate(true),
 		"daily_orders": daily_orders.duplicate(true),
 		"album_discovered": album_discovered.duplicate(true),
+		"story_quests": story_quests.duplicate(true),
+		"npc_hearts": npc_hearts.duplicate(true),
+		"folklore_discovered": folklore_discovered.duplicate(true),
+		"book_chapters_read": book_chapters_read.duplicate(true),
+		"book_bonus_claimed_today": book_bonus_claimed_today,
 		"animal_count": animal_count,
 		"world": world_data,
 	}
@@ -1149,6 +1389,28 @@ func load_game() -> bool:
 	_load_dict_int_keys(fish, data.get("fish", {}))
 	_load_dict_int_keys(artisan, data.get("artisan", {}))
 	_load_dict_int_keys(supplies, data.get("supplies", {}))
+
+	story_quests.clear()
+	var loaded_sq = data.get("story_quests", {})
+	if loaded_sq is Dictionary:
+		for sk in loaded_sq.keys():
+			story_quests[str(sk)] = str(loaded_sq[sk])
+	_load_dict_int_keys(npc_hearts, data.get("npc_hearts", {}))
+	npc_talked_today.clear()
+	folklore_discovered.clear()
+	var loaded_fk = data.get("folklore_discovered", [])
+	if loaded_fk is Array:
+		for fid in loaded_fk:
+			folklore_discovered.append(str(fid))
+	book_chapters_read.clear()
+	var loaded_br = data.get("book_chapters_read", [])
+	if loaded_br is Array:
+		for bid in loaded_br:
+			book_chapters_read.append(str(bid))
+	book_bonus_claimed_today = bool(data.get("book_bonus_claimed_today", false))
+	if str(story_quests.get("fogo_estrada_real", "")) == "completed":
+		max_stamina += 15
+		stamina = clampi(stamina, 0, max_stamina)
 
 	gold_items.clear()
 	var loaded_gold = data.get("gold_items", {})
@@ -1270,6 +1532,12 @@ func reset_save() -> void:
 	supplies = {
 		"fertilizer": 2,
 	}
+	story_quests.clear()
+	npc_hearts = {"padre": 0, "ferreiro": 0, "quiteria": 0}
+	npc_talked_today.clear()
+	folklore_discovered.clear()
+	book_chapters_read.clear()
+	book_bonus_claimed_today = false
 	gold_items.clear()
 	owned_machines = {
 		"cheese_press": false,
