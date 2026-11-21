@@ -26,6 +26,10 @@ const SHIPPING_BIN_TILE := Vector2i(10, 5)
 const SHOP_SIGN_TILE := Vector2i(12, 5)
 const ORDER_BOARD_TILE := Vector2i(13, 5)
 const WELL_TILE := Vector2i(15, 5)
+const FOUNTAIN_TILE := Vector2i(7, 10)
+const CAPELA_TILE := Vector2i(4, 5)
+const PAIOL_TILE := Vector2i(5, 16)
+const CARRO_BOI_TILE := Vector2i(21, 20)
 const HOUSE_DOOR_POS := Vector2(128.0, 96.0)
 const HOUSE_EXIT_SPAWN_POS := Vector2(128.0, 102.0)
 const HOUSE_DOOR_TILES: Array[Vector2i] = [
@@ -106,6 +110,8 @@ var _is_transitioning: bool = false
 var _transition_rect: ColorRect = null
 var _door_cooldown: float = 0.0
 var _tea_used_today: bool = false
+var _fountain_drank_today: bool = false
+var _lamp_glows: Array[Sprite2D] = []
 var _guide_tip_index: int = 0
 var _entered_house_once: bool = false
 var _rng := RandomNumberGenerator.new()
@@ -162,6 +168,8 @@ class WeatherFxNode extends Node2D:
 		Vector2(522.0, 266.0),
 		Vector2(496.0, 294.0),
 		Vector2(548.0, 278.0),
+		Vector2(114.0, 174.0),
+		Vector2(126.0, 174.0),
 	]
 	var smoke_puffs: Array[Dictionary] = []
 	var _time_acc: float = 0.0
@@ -721,6 +729,7 @@ func _on_game_reset() -> void:
 	if _fishing_active:
 		_end_fishing_minigame(false, true)
 	_tea_used_today = false
+	_fountain_drank_today = false
 	_apply_location_state("farm", Vector2(136.0, 118.0), Vector2i(0, 1))
 	soil_layer.clear()
 	for tile_var in _crops.keys():
@@ -769,8 +778,8 @@ func _build_farm_map() -> void:
 				tile_coord = TILE_FLOWERS
 			ground_layer.set_cell(cell, 0, tile_coord)
 
-	# Dirt paths connecting house, shipping bin, shop sign, well, arable field, pen, and pond
-	for x in range(7, 29):
+	# Dirt paths connecting house, Capela, Chafariz, Paiol, shipping bin, shop sign, well, arable field, pen, Estrada Real, and pond
+	for x in range(4, 29):
 		ground_layer.set_cell(Vector2i(x, 6), 0, TILE_PATH)
 	for y in range(6, 9):
 		ground_layer.set_cell(Vector2i(17, y), 0, TILE_PATH)
@@ -781,6 +790,19 @@ func _build_farm_map() -> void:
 		ground_layer.set_cell(Vector2i(x, 11), 0, TILE_PATH)
 		ground_layer.set_cell(Vector2i(x, 12), 0, TILE_PATH)
 	ground_layer.set_cell(Vector2i(8, 5), 0, TILE_PATH)
+	# Pátio do Chafariz Colonial e acesso ao portão oeste da lavoura e ao Paiol
+	for y in range(7, 13):
+		ground_layer.set_cell(Vector2i(7, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(8, y), 0, TILE_PATH)
+	for x in range(6, 11):
+		ground_layer.set_cell(Vector2i(x, 11), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(x, 12), 0, TILE_PATH)
+	for y in range(12, 18):
+		ground_layer.set_cell(Vector2i(5, y), 0, TILE_PATH)
+	# Estrada Real (saída sul da lavoura até a porteira)
+	for y in range(17, 24):
+		ground_layer.set_cell(Vector2i(17, y), 0, TILE_PATH)
+		ground_layer.set_cell(Vector2i(18, y), 0, TILE_PATH)
 
 	# Lake in bottom-right corner
 	for y in range(14, 20):
@@ -885,14 +907,76 @@ func _spawn_buildings_and_props() -> void:
 		Rect2(0.0, -4.0, 18.0, 12.0)
 	)
 
+	# Capela Rural Colonial (sineira, porta azul e telha capa-canal)
+	_spawn_colonial_building(
+		"CapelaColonial",
+		"res://assets/sprites/colonial_buildings_px/capela_colonial.png",
+		Vector2(CAPELA_TILE.x * TILE_SIZE + 8.0, CAPELA_TILE.y * TILE_SIZE + 4.0),
+		Vector2(0.0, -22.0),
+		Rect2(0.0, -10.0, 38.0, 22.0)
+	)
+
+	# Paiol / Armazém Colonial (sprite já existente no repositório)
+	_spawn_colonial_building(
+		"PaiolColonial",
+		"res://assets/sprites/colonial_buildings_px/paiol.png",
+		Vector2(PAIOL_TILE.x * TILE_SIZE + 8.0, PAIOL_TILE.y * TILE_SIZE + 8.0),
+		Vector2(0.0, -16.0),
+		Rect2(0.0, -8.0, 36.0, 20.0)
+	)
+
+	# Chafariz Colonial de pedra-sabão com carrancas e tanque
+	_spawn_colonial_building(
+		"ChafarizColonial",
+		"res://assets/sprites/colonial_buildings_px/chafariz_colonial.png",
+		Vector2(FOUNTAIN_TILE.x * TILE_SIZE + 8.0, FOUNTAIN_TILE.y * TILE_SIZE + 8.0),
+		Vector2(0.0, -14.0),
+		Rect2(0.0, -6.0, 34.0, 18.0)
+	)
+
+	# Carro de Boi estacionado na Estrada Real (entrada sul)
+	_spawn_colonial_building(
+		"CarroDeBoi",
+		"res://assets/sprites/colonial_buildings_px/carro_de_boi.png",
+		Vector2(CARRO_BOI_TILE.x * TILE_SIZE + 8.0, CARRO_BOI_TILE.y * TILE_SIZE + 8.0),
+		Vector2(0.0, -8.0),
+		Rect2(0.0, -4.0, 34.0, 14.0)
+	)
+
+	# Palmeiras Imperiais (símbolo das sedes de fazendas coloniais)
+	var palm_positions: Array[Vector2] = [
+		Vector2(6.0 * TILE_SIZE + 4.0, 7.5 * TILE_SIZE),
+		Vector2(10.0 * TILE_SIZE + 4.0, 7.5 * TILE_SIZE),
+		Vector2(16.0 * TILE_SIZE + 4.0, 21.5 * TILE_SIZE),
+		Vector2(19.5 * TILE_SIZE + 4.0, 21.5 * TILE_SIZE),
+	]
+	for idx in range(palm_positions.size()):
+		_spawn_colonial_building(
+			"PalmeiraImperial_%d" % idx,
+			"res://assets/sprites/colonial_buildings_px/palmeira_imperial.png",
+			palm_positions[idx],
+			Vector2(0.0, -18.0),
+			Rect2(0.0, -3.0, 10.0, 8.0)
+		)
+
+	# Lampiões a óleo coloniais (acendem ao entardecer/noite)
+	var lamp_positions: Array[Vector2] = [
+		Vector2(9.5 * TILE_SIZE, 5.5 * TILE_SIZE),
+		Vector2(5.5 * TILE_SIZE, 5.5 * TILE_SIZE),
+		Vector2(9.2 * TILE_SIZE, 10.2 * TILE_SIZE),
+		Vector2(16.2 * TILE_SIZE, 19.5 * TILE_SIZE),
+	]
+	for idx in range(lamp_positions.size()):
+		_spawn_colonial_lamp("Lampiao_%d" % idx, lamp_positions[idx])
+
 	# Perimeter trees (32x32)
 	var tree_positions: Array[Vector2i] = [
 		Vector2i(2, 2), Vector2i(5, 2), Vector2i(18, 2), Vector2i(22, 2),
 		Vector2i(25, 2), Vector2i(37, 2),
 		Vector2i(2, 6), Vector2i(2, 11), Vector2i(2, 16), Vector2i(3, 20),
-		Vector2i(7, 21), Vector2i(12, 21), Vector2i(19, 21), Vector2i(24, 21),
+		Vector2i(7, 21), Vector2i(12, 21), Vector2i(24, 21),
 		Vector2i(37, 8), Vector2i(37, 13), Vector2i(37, 19),
-		Vector2i(5, 14), Vector2i(26, 17),
+		Vector2i(3, 14), Vector2i(26, 17),
 	]
 	for tp in tree_positions:
 		_spawn_prop_sprite(
@@ -905,7 +989,7 @@ func _spawn_buildings_and_props() -> void:
 
 	# Rocks (16x16)
 	var rock_tiles: Array[Vector2i] = [
-		Vector2i(4, 5), Vector2i(4, 10), Vector2i(8, 17),
+		Vector2i(2, 8), Vector2i(4, 10), Vector2i(8, 17),
 		Vector2i(22, 5), Vector2i(28, 20), Vector2i(36, 16),
 	]
 	for rt in rock_tiles:
@@ -920,7 +1004,7 @@ func _spawn_buildings_and_props() -> void:
 	# Bushes (16x16)
 	var bush_tiles: Array[Vector2i] = [
 		Vector2i(6, 5), Vector2i(9, 4), Vector2i(14, 4),
-		Vector2i(6, 12), Vector2i(9, 18), Vector2i(15, 19),
+		Vector2i(9, 13), Vector2i(9, 18), Vector2i(15, 19),
 		Vector2i(22, 18), Vector2i(27, 14), Vector2i(35, 12),
 	]
 	for bt in bush_tiles:
@@ -1004,6 +1088,38 @@ func _spawn_colonial_building(
 
 	add_child(body)
 	_exterior_props.append(body)
+	return body
+
+
+func _spawn_colonial_lamp(prop_name: String, world_pos: Vector2) -> StaticBody2D:
+	var body := _spawn_colonial_building(
+		prop_name,
+		"res://assets/sprites/colonial_buildings_px/lampiao_colonial.png",
+		world_pos,
+		Vector2(0.0, -9.0),
+		Rect2(0.0, -2.0, 6.0, 6.0)
+	)
+	if body == null:
+		return null
+	var glow := Sprite2D.new()
+	var grad := GradientTexture2D.new()
+	grad.fill = GradientTexture2D.FILL_RADIAL
+	grad.fill_from = Vector2(0.5, 0.5)
+	grad.fill_to = Vector2(0.5, 0.0)
+	grad.width = 48
+	grad.height = 48
+	var g := Gradient.new()
+	g.colors = PackedColorArray([Color(1.0, 0.78, 0.36, 0.55), Color(1.0, 0.62, 0.22, 0.0)])
+	grad.gradient = g
+	glow.texture = grad
+	glow.position = Vector2(0.0, -14.0)
+	glow.z_index = 12
+	var mat := CanvasItemMaterial.new()
+	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	glow.material = mat
+	glow.visible = false
+	body.add_child(glow)
+	_lamp_glows.append(glow)
 	return body
 
 
@@ -1193,6 +1309,41 @@ func _handle_interact() -> void:
 	var nearby_machine := _find_nearby_machine(p_pos)
 	if not nearby_machine.is_empty():
 		_interact_with_machine(nearby_machine)
+		return
+
+	# Check proximity to Chafariz Colonial -> refill water & drink once per day
+	if p_pos.distance_to(_tile_center(FOUNTAIN_TILE)) <= 32.0:
+		_refill_watering_can()
+		if not _fountain_drank_today:
+			_fountain_drank_today = true
+			var cur_stam: int = int(_game_state.get("stamina"))
+			var max_stam: int = int(_game_state.get("max_stamina"))
+			var new_stam: int = mini(max_stam, cur_stam + 10)
+			_game_state.set("stamina", new_stam)
+			if _game_state.has_signal("stamina_changed"):
+				_game_state.stamina_changed.emit(new_stam, max_stam)
+			_play_sfx("play_splash")
+			_spawn_floating_text(_tile_center(FOUNTAIN_TILE) + Vector2(0.0, -16.0), "+10 Energia", Color(0.55, 0.92, 1.0))
+			_show_toast("Água fresca do Chafariz! (+10 Energia)")
+		return
+
+	# Check proximity to Capela Rural Colonial
+	if p_pos.distance_to(_tile_center(CAPELA_TILE)) <= 34.0:
+		_play_sfx("play_cozy")
+		_spawn_particles(_tile_center(CAPELA_TILE), Color(1.0, 0.94, 0.65))
+		_show_toast("Capela da Fazenda: Que a colheita seja abençoada!")
+		return
+
+	# Check proximity to Paiol Colonial
+	if p_pos.distance_to(_tile_center(PAIOL_TILE)) <= 34.0:
+		_play_sfx("play_click")
+		var total_stored: int = 0
+		for dict_key in ["harvested", "animal_products", "fish", "artisan"]:
+			var inv_val: Variant = _game_state.get(dict_key)
+			if inv_val is Dictionary:
+				for qty in (inv_val as Dictionary).values():
+					total_stored += int(qty)
+		_show_toast("Paiol Colonial: %d itens prontos na sacola." % total_stored)
 		return
 
 	# Check proximity to Well or Pond -> refill water
@@ -1809,6 +1960,7 @@ func _refill_watering_can() -> void:
 
 func _on_day_advanced(_new_day: int) -> void:
 	_tea_used_today = false
+	_fountain_drank_today = false
 	if _game_state != null:
 		var gs_season: String = str(_game_state.get("current_season"))
 		if not gs_season.is_empty():
@@ -2128,6 +2280,7 @@ func _restore_world_state(data: Dictionary) -> void:
 						animal.set("collected_today", val)
 
 	_tea_used_today = bool(data.get("tea_used_today", false))
+	_fountain_drank_today = bool(data.get("fountain_drank_today", false))
 	var saved_loc: String = str(data.get("location", "farm"))
 	var saved_pos_var: Variant = data.get("player_pos", [])
 	var target_pos := Vector2(136.0, 118.0)
@@ -2182,6 +2335,13 @@ func _update_day_night_tint() -> void:
 		var want_fireflies: bool = (_current_season_id == "summer" and mins >= 1050.0 and str(_game_state.get("weather")) != "rainy")
 		if _firefly_particles.emitting != want_fireflies:
 			_firefly_particles.emitting = want_fireflies
+
+	var want_lamps: bool = (mins >= 1020.0 or mins < 400.0)
+	var lamp_alpha: float = clampf((mins - 1020.0) / 120.0, 0.25, 1.0) if mins >= 1020.0 else 0.75
+	for glow in _lamp_glows:
+		if is_instance_valid(glow):
+			glow.visible = want_lamps
+			glow.modulate.a = lamp_alpha
 
 
 func _update_target_cursor(shop_open: bool) -> void:
@@ -2289,6 +2449,15 @@ func _update_prompt_label(shop_open: bool) -> void:
 	elif p_pos.distance_to(_tile_center(WELL_TILE)) <= 28.0:
 		hint = "[F] Encher Água"
 		anchor = _tile_center(WELL_TILE) + Vector2(0.0, -20.0)
+	elif p_pos.distance_to(_tile_center(FOUNTAIN_TILE)) <= 32.0:
+		hint = "[F] Beber / Encher Água" if not _fountain_drank_today else "[F] Encher Água"
+		anchor = _tile_center(FOUNTAIN_TILE) + Vector2(0.0, -24.0)
+	elif p_pos.distance_to(_tile_center(CAPELA_TILE)) <= 34.0:
+		hint = "[F] Orar na Capela"
+		anchor = _tile_center(CAPELA_TILE) + Vector2(0.0, -28.0)
+	elif p_pos.distance_to(_tile_center(PAIOL_TILE)) <= 34.0:
+		hint = "[F] Ver Paiol"
+		anchor = _tile_center(PAIOL_TILE) + Vector2(0.0, -24.0)
 	elif nearby_animal != null:
 		if nearby_animal.has_method("can_collect") and bool(nearby_animal.call("can_collect")):
 			var a_type: String = str(nearby_animal.get("animal_type"))
@@ -2348,9 +2517,9 @@ func _is_tile_in_reach(tile: Vector2i) -> bool:
 
 
 func _is_near_water_source(world_pos: Vector2, target_tile: Vector2i) -> bool:
-	if world_pos.distance_to(_tile_center(WELL_TILE)) <= 30.0:
+	if world_pos.distance_to(_tile_center(WELL_TILE)) <= 30.0 or world_pos.distance_to(_tile_center(FOUNTAIN_TILE)) <= 32.0:
 		return true
-	if target_tile == WELL_TILE:
+	if target_tile == WELL_TILE or target_tile == FOUNTAIN_TILE:
 		return true
 	var player_tile: Vector2i = _world_to_tile(world_pos)
 	for dy in range(-1, 2):
