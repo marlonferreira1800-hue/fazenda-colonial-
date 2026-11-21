@@ -205,3 +205,102 @@ const FOLKLORE_INFO: Dictionary = {
 		"quest_id": "canto_mae_dagua",
 	},
 }
+
+const BOOK_CHAPTER_ORDER: Array[String] = [
+	"serao_dona_benta",
+	"emilia_reino_aguas",
+	"visconde_sabugo",
+	"pedrinho_e_o_saci",
+	"cuca_mata_colonial",
+	"quindim_rabico_festa",
+]
+
+## Livro de Histórias do Sítio (inspirado na obra em domínio público de Monteiro Lobato)
+## adaptado ao universo e às mecânicas da Fazenda Colonial.
+const BOOK_CHAPTERS: Dictionary = {
+	"serao_dona_benta": {
+		"id": "serao_dona_benta",
+		"title": "I. Os Serões de Dona Benta",
+		"short_title": "I. Dona Benta",
+		"subtitle": "Dona Benta & Tia Nastácia",
+		"unlock_type": "always",
+		"unlock_req": "",
+		"unlock_hint": "Disponível desde o início na estante da casa.",
+		"pages": [
+			"Ao cair da tarde, quando a enxada descansa e a lareira começa a crepitar, Dona Benta abre este velho livro encadernado em couro na varanda da fazenda.",
+			"Da cozinha de Tia Nastácia sobe o cheiro de broa de milho, pão caseiro e chá quentinho — um convite para ouvir histórias que misturam imaginação e vida na roça.",
+			"\"Quem cuida da terra com carinho\", diz Dona Benta, \"descobre que cada canto do sítio guarda um encanto: da mata ao norte até as águas calmas do lago.\""
+		],
+	},
+	"emilia_reino_aguas": {
+		"id": "emilia_reino_aguas",
+		"title": "II. Emília e as Águas Claras",
+		"short_title": "II. Emília",
+		"subtitle": "Narizinho & o Ribeirão",
+		"unlock_type": "always",
+		"unlock_req": "",
+		"unlock_hint": "Disponível desde o início na estante da casa.",
+		"pages": [
+			"Narizinho adorava sentar-se à beira do ribeirão com sua boneca de pano, Emília, observando os peixinhos brilharem sob o sol da tarde.",
+			"Depois que o Doutor Caramujo deu à boneca a famosa pílula falante, Emília nunca mais parou de tagarelar — e jurava ouvir um canto misterioso vindo do fundo do lago.",
+			"Dica do Sítio: ao entardecer (16h–20h), leve sua Vara de Pesca até a margem do lago. Dizem que a própria Iara aparece para quem pesca com paciência!"
+		],
+	},
+	"visconde_sabugo": {
+		"id": "visconde_sabugo",
+		"title": "III. O Visconde de Sabugosa",
+		"short_title": "III. Visconde",
+		"subtitle": "O Sábio da Estante e do Milharal",
+		"unlock_type": "item",
+		"unlock_req": "corn",
+		"unlock_hint": "Desbloqueia ao colher Milho pela primeira vez na fazenda.",
+		"pages": [
+			"Feito de um sabugo de milho esquecido entre os livros antigos da estante, o Visconde de Sabugosa leu tanto que virou o maior sábio de toda a fazenda!",
+			"Com sua cartolinha bem aprumada, ele estuda o solo, as estações e o crescimento das espigas douradas, anotando cada segredo da lavoura no seu caderno.",
+			"Anotação do Visconde: \"O Curupira vigia a mata ao norte entre 06h e 17h. Quem lhe oferecer 2 Milhos ou 1 Melado de Cana recebe fertilizantes mágicos da floresta!\""
+		],
+	},
+	"pedrinho_e_o_saci": {
+		"id": "pedrinho_e_o_saci",
+		"title": "IV. Pedrinho e o Redemoinho",
+		"short_title": "IV. O Saci",
+		"subtitle": "As Lições de Tio Barnabé",
+		"unlock_type": "folklore",
+		"unlock_req": "saci",
+		"unlock_hint": "Desbloqueia ao encontrar o Saci-Pererê à tarde (12h–18h).",
+		"pages": [
+			"Pedrinho sempre sonhou em ver um Saci de perto. Foi Tio Barnabé quem lhe ensinou: quando um redemoinho de folhas dança perto da roça à tarde, o peralta está lá dentro!",
+			"De gorro vermelho e cachimbo na boca, o Saci adora pregar peças na fazenda, dar nó em crina de cavalo e assobiar de longe só para confundir o lavrador.",
+			"Segredo de Tio Barnabé: \"Em vez de tentar prendê-lo na garrafa, faça amizade! Seque Tabaco no Terreiro e ofereça 1 Rolo de Fumo ao Saci — ele retribui com sorte nas vendas.\""
+		],
+	},
+	"cuca_mata_colonial": {
+		"id": "cuca_mata_colonial",
+		"title": "V. Mistérios da Mata e da Noite",
+		"short_title": "V. A Mata",
+		"subtitle": "Lendas da Estrada Real",
+		"unlock_type": "folklore_any",
+		"unlock_req": ["curupira", "mula"],
+		"unlock_hint": "Desbloqueia ao encontrar o Curupira ou a Mula Sem Cabeça.",
+		"pages": [
+			"Quando a noite cai sobre a fazenda e os lampiões se acendem, até os mais valentes lembram das histórias da Cuca na gruta e das lendas que rondam a Estrada Real.",
+			"Na mata fechada, o Curupira protege as árvores com suas pegadas viradas para trás; já na estrada, após as 19h, o galope flamejante da Mula Sem Cabeça ilumina a neblina.",
+			"Conselho de Dona Benta: \"O medo se dissipa com respeito e fé. Antes de falar com a Mula Sem Cabeça à noite, faça uma prece na Capela da fazenda para receber a Bênção.\""
+		],
+	},
+	"quindim_rabico_festa": {
+		"id": "quindim_rabico_festa",
+		"title": "VI. O Quintal de Tia Nastácia",
+		"short_title": "VI. O Quintal",
+		"subtitle": "Bichos, Forno e Festa na Vila",
+		"unlock_type": "quest_or_artisan",
+		"unlock_req": "",
+		"unlock_hint": "Desbloqueia ao concluir uma missão ou produzir um item artesanal.",
+		"pages": [
+			"No quintal do sítio nunca falta alegria: o guloso Marquês de Rabicó fareja jabuticabas, o sábio burro Conselheiro observa o pasto e o bom rinoceronte Quindim vigia a porteira.",
+			"Enquanto isso, a Casa de Farinha, a prensa de queijos e o forno de barro trabalham a todo vapor, enchendo a mesa da fazenda e alegrando as festas da Igreja Matriz.",
+			"E assim, entre colheitas, bichos cuidados e boas histórias à beira da lareira, a sua Fazenda Colonial torna-se um verdadeiro Sítio de encantos!"
+		],
+	},
+}
+

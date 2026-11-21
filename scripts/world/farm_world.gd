@@ -3262,8 +3262,11 @@ func _interact_with_house_object(obj: Dictionary) -> void:
 			_show_toast("Lareira quentinha crepitando...")
 		"bookshelf":
 			_play_sfx("play_click")
-			_show_toast(FARM_GUIDE_TIPS[_guide_tip_index])
-			_guide_tip_index = (_guide_tip_index + 1) % FARM_GUIDE_TIPS.size()
+			if hud != null and hud.has_method("open_storybook"):
+				hud.call("open_storybook")
+			else:
+				_show_toast(FARM_GUIDE_TIPS[_guide_tip_index])
+				_guide_tip_index = (_guide_tip_index + 1) % FARM_GUIDE_TIPS.size()
 		"desk":
 			_play_sfx("play_cozy")
 			_game_state.call("save_game", true)

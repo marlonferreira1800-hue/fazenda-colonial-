@@ -151,6 +151,8 @@ var npc_hearts: Dictionary = {
 }
 var npc_talked_today: Dictionary = {}
 var folklore_discovered: Array[String] = []
+var book_chapters_read: Array[String] = []
+var book_bonus_claimed_today: bool = false
 var gold_items: Dictionary = {}
 
 var owned_machines: Dictionary = {
@@ -832,6 +834,68 @@ func interact_story_entity(entity_id: String, capela_blessed: bool = false) -> D
 	return {}
 
 
+func is_book_chapter_unlocked(chapter_id: String) -> bool:
+	if not StoryDataScript.BOOK_CHAPTERS.has(chapter_id):
+		return false
+	var ch: Dictionary = StoryDataScript.BOOK_CHAPTERS[chapter_id]
+	var utype: String = str(ch.get("unlock_type", "always"))
+	match utype:
+		"always":
+			return true
+		"item":
+			var req_item: String = str(ch.get("unlock_req", ""))
+			return bool(album_discovered.get(req_item, false)) or int(harvested.get(req_item, 0)) > 0
+		"folklore":
+			var req_fk: String = str(ch.get("unlock_req", ""))
+			return folklore_discovered.has(req_fk)
+		"folklore_any":
+			var req_arr = ch.get("unlock_req", [])
+			if req_arr is Array:
+				for fk in req_arr:
+					if folklore_discovered.has(str(fk)):
+						return true
+			return false
+		"quest_or_artisan":
+			for st in story_quests.values():
+				if str(st) == "completed":
+					return true
+			for a_id in artisan.keys():
+				if bool(album_discovered.get(str(a_id), false)) or int(artisan.get(a_id, 0)) > 0:
+					return true
+			return false
+	return false
+
+
+func get_unlocked_book_count() -> int:
+	var count: int = 0
+	for cid in StoryDataScript.BOOK_CHAPTER_ORDER:
+		if is_book_chapter_unlocked(cid):
+			count += 1
+	return count
+
+
+func mark_book_chapter_read(chapter_id: String) -> Dictionary:
+	if not is_book_chapter_unlocked(chapter_id):
+		return {"bonus_granted": false, "first_read": false}
+	var first_read: bool = false
+	if not book_chapters_read.has(chapter_id):
+		book_chapters_read.append(chapter_id)
+		first_read = true
+	var bonus_granted: bool = false
+	if not book_bonus_claimed_today:
+		book_bonus_claimed_today = true
+		bonus_granted = true
+		stamina = mini(max_stamina, stamina + 10)
+		stamina_changed.emit(stamina, max_stamina)
+		var audio := get_node_or_null("/root/AudioManager")
+		if audio != null and audio.has_method("play_cozy"):
+			audio.play_cozy()
+		emit_toast("Leitura do Sítio! +10 Energia de aconchego.")
+	if first_read or bonus_granted:
+		story_changed.emit()
+	return {"bonus_granted": bonus_granted, "first_read": first_read}
+
+
 func start_machine(machine_id: String) -> String:
 	if not bool(owned_machines.get(machine_id, false)) or not FarmCatalogScript.MACHINES.has(machine_id):
 		return "not_owned"
@@ -1021,6 +1085,7 @@ func set_touch_mode(mode: String) -> void:
 
 func advance_day() -> void:
 	npc_talked_today.clear()
+	book_bonus_claimed_today = false
 	day += 1
 	time_minutes = START_OF_DAY_MINUTES
 	_last_emitted_minute = int(time_minutes)
@@ -1243,6 +1308,8 @@ func save_game(show_toast: bool = true) -> bool:
 		"story_quests": story_quests.duplicate(true),
 		"npc_hearts": npc_hearts.duplicate(true),
 		"folklore_discovered": folklore_discovered.duplicate(true),
+		"book_chapters_read": book_chapters_read.duplicate(true),
+		"book_bonus_claimed_today": book_bonus_claimed_today,
 		"animal_count": animal_count,
 		"world": world_data,
 	}
@@ -1335,6 +1402,12 @@ func load_game() -> bool:
 	if loaded_fk is Array:
 		for fid in loaded_fk:
 			folklore_discovered.append(str(fid))
+	book_chapters_read.clear()
+	var loaded_br = data.get("book_chapters_read", [])
+	if loaded_br is Array:
+		for bid in loaded_br:
+			book_chapters_read.append(str(bid))
+	book_bonus_claimed_today = bool(data.get("book_bonus_claimed_today", false))
 	if str(story_quests.get("fogo_estrada_real", "")) == "completed":
 		max_stamina += 15
 		stamina = clampi(stamina, 0, max_stamina)
@@ -1463,6 +1536,8 @@ func reset_save() -> void:
 	npc_hearts = {"padre": 0, "ferreiro": 0, "quiteria": 0}
 	npc_talked_today.clear()
 	folklore_discovered.clear()
+	book_chapters_read.clear()
+	book_bonus_claimed_today = false
 	gold_items.clear()
 	owned_machines = {
 		"cheese_press": false,

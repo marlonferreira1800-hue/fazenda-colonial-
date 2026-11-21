@@ -184,6 +184,21 @@ var _journal_panel: PanelContainer
 var _journal_tab_buttons: Array[Button] = []
 var _journal_content_vbox: VBoxContainer
 
+var _book_backdrop: ColorRect
+var _book_panel: PanelContainer
+var _book_open: bool = false
+var _book_chapters_vbox: VBoxContainer
+var _book_progress_label: Label
+var _book_chapter_title_label: Label
+var _book_chapter_subtitle_label: Label
+var _book_page_body_label: Label
+var _book_page_counter_label: Label
+var _book_status_label: Label
+var _book_prev_btn: Button
+var _book_next_btn: Button
+var _book_current_chapter: String = "serao_dona_benta"
+var _book_current_page: int = 0
+
 var _changelog_backdrop: ColorRect
 var _changelog_panel: PanelContainer
 var _changelog_title_label: Label
@@ -266,7 +281,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if (InputMap.has_action("ui_cancel") and event.is_action_pressed("ui_cancel")) or (key_pressed and keycode == KEY_ESCAPE):
 		_play_click()
-		if _changelog_open:
+		if _book_open:
+			_set_book_open(false)
+		elif _changelog_open:
 			_set_changelog_open(false)
 		elif _menu_open:
 			if _menu_reset_confirm_box != null and _menu_reset_confirm_box.visible:
@@ -281,6 +298,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_menu_open(true)
 		get_viewport().set_input_as_handled()
 		return
+
+	if _book_open and key_pressed:
+		if keycode == KEY_LEFT or keycode == KEY_A:
+			_flip_book_page(-1)
+			get_viewport().set_input_as_handled()
+			return
+		elif keycode == KEY_RIGHT or keycode == KEY_D:
+			_flip_book_page(1)
+			get_viewport().set_input_as_handled()
+			return
 
 	if (_changelog_open or _menu_open) and (
 		(InputMap.has_action("toggle_demo") and event.is_action_pressed("toggle_demo")) or (key_pressed and keycode == KEY_P)
@@ -394,6 +421,7 @@ func is_dialogue_open() -> bool:
 func close_all_modals() -> void:
 	_set_shop_open(false)
 	_set_journal_open(false)
+	_set_book_open(false)
 	_set_changelog_open(false)
 	_set_menu_open(false)
 	if _dialogue_open:
@@ -404,7 +432,18 @@ func close_all_modals() -> void:
 
 
 func is_shop_open() -> bool:
-	return _shop_open or _changelog_open or _menu_open or _journal_open or _dialogue_open
+	return _shop_open or _changelog_open or _menu_open or _journal_open or _book_open or _dialogue_open
+
+
+func open_storybook(chapter_id: String = "") -> void:
+	if not chapter_id.is_empty() and StoryDataScript.BOOK_CHAPTERS.has(chapter_id):
+		_book_current_chapter = chapter_id
+		_book_current_page = 0
+	_set_book_open(true)
+
+
+func toggle_storybook() -> void:
+	_set_book_open(not _book_open)
 
 
 func toggle_changelog() -> void:
@@ -427,6 +466,8 @@ func _set_shop_open(open: bool) -> void:
 			_set_menu_open(false)
 		if _journal_open:
 			_set_journal_open(false)
+		if _book_open:
+			_set_book_open(false)
 	_shop_open = open
 	if _shop_backdrop != null:
 		_shop_backdrop.visible = _shop_open
@@ -444,6 +485,8 @@ func _set_journal_open(open: bool) -> void:
 			_set_changelog_open(false)
 		if _menu_open:
 			_set_menu_open(false)
+		if _book_open:
+			_set_book_open(false)
 	_journal_open = open
 	if _journal_backdrop != null:
 		_journal_backdrop.visible = _journal_open
@@ -451,6 +494,32 @@ func _set_journal_open(open: bool) -> void:
 		_journal_panel.visible = _journal_open
 	if _journal_open:
 		_refresh_journal()
+
+
+func _set_book_open(open: bool) -> void:
+	if open:
+		if _shop_open:
+			_set_shop_open(false)
+		if _changelog_open:
+			_set_changelog_open(false)
+		if _menu_open:
+			_set_menu_open(false)
+		if _journal_open:
+			_set_journal_open(false)
+	_book_open = open
+	if _book_backdrop != null:
+		_book_backdrop.visible = _book_open
+	if _book_panel != null:
+		_book_panel.visible = _book_open
+	if _book_open:
+		var gs := _get_game_state()
+		if gs != null and gs.has_method("is_book_chapter_unlocked"):
+			if not bool(gs.call("is_book_chapter_unlocked", _book_current_chapter)):
+				_book_current_chapter = StoryDataScript.BOOK_CHAPTER_ORDER[0]
+				_book_current_page = 0
+			if gs.has_method("mark_book_chapter_read"):
+				gs.call("mark_book_chapter_read", _book_current_chapter)
+		_refresh_storybook()
 
 
 func _set_changelog_open(open: bool) -> void:
@@ -461,6 +530,8 @@ func _set_changelog_open(open: bool) -> void:
 			_set_menu_open(false)
 		if _journal_open:
 			_set_journal_open(false)
+		if _book_open:
+			_set_book_open(false)
 	_changelog_open = open
 	if _changelog_backdrop != null:
 		_changelog_backdrop.visible = _changelog_open
@@ -476,6 +547,8 @@ func _set_menu_open(open: bool) -> void:
 			_set_changelog_open(false)
 		if _journal_open:
 			_set_journal_open(false)
+		if _book_open:
+			_set_book_open(false)
 	_menu_open = open
 	if _menu_reset_confirm_box != null:
 		_menu_reset_confirm_box.visible = false
@@ -650,6 +723,7 @@ func _build_ui() -> void:
 	_build_controls_hint()
 	_build_shop_modal()
 	_build_journal_modal()
+	_build_book_modal()
 	_build_dialogue_box()
 	_build_changelog_modal()
 	_build_menu_modal()
@@ -1452,6 +1526,223 @@ func _build_journal_modal() -> void:
 		_set_journal_open(false)
 	)
 	footer.add_child(close_btn)
+
+
+func _build_book_modal() -> void:
+	_book_backdrop = ColorRect.new()
+	_book_backdrop.name = "StorybookBackdrop"
+	_book_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_book_backdrop.color = Color(0.08, 0.05, 0.03, 0.60)
+	_book_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_book_backdrop.visible = false
+	_ui_root.add_child(_book_backdrop)
+
+	_book_panel = PanelContainer.new()
+	_book_panel.name = "StorybookPanel"
+	_book_panel.anchor_left = 0.5
+	_book_panel.anchor_right = 0.5
+	_book_panel.anchor_top = 0.5
+	_book_panel.anchor_bottom = 0.5
+	_book_panel.offset_left = -214
+	_book_panel.offset_right = 214
+	_book_panel.offset_top = -126
+	_book_panel.offset_bottom = 116
+	_book_panel.visible = false
+	_book_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_book_panel.add_theme_stylebox_override("panel", _make_flat_style(COL_PARCHMENT, COL_WOOD_BORDER, 3, 9, 6, 3))
+	_book_backdrop.add_child(_book_panel)
+
+	var main_vbox := VBoxContainer.new()
+	main_vbox.add_theme_constant_override("separation", 4)
+	main_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_book_panel.add_child(main_vbox)
+
+	# Header
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 6)
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_vbox.add_child(header)
+
+	var title := _make_label("Livro de Histórias do Sítio", 10, COL_WOOD_DARK)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+
+	_book_progress_label = _make_label("0/6 cap.", 8, COL_GOLD_TEXT)
+	header.add_child(_book_progress_label)
+
+	var close_btn := _make_colored_button(
+		"Fechar (Esc)",
+		Vector2(70, 17),
+		7,
+		Color("#b84b3e"),
+		Color("#cf5a4c"),
+		Color("#94392e"),
+		Color("#61231c"),
+		Color.WHITE
+	)
+	close_btn.pressed.connect(func() -> void:
+		_play_click()
+		_set_book_open(false)
+	)
+	header.add_child(close_btn)
+
+	main_vbox.add_child(_make_separator())
+
+	# Body: Index on left, Open Page on right
+	var body_hbox := HBoxContainer.new()
+	body_hbox.add_theme_constant_override("separation", 6)
+	body_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_vbox.add_child(body_hbox)
+
+	var idx_panel := PanelContainer.new()
+	idx_panel.custom_minimum_size = Vector2(126, 158)
+	idx_panel.add_theme_stylebox_override("panel", _make_flat_style(COL_PARCHMENT_ALT, Color("#b89563"), 1, 4, 4, 2))
+	body_hbox.add_child(idx_panel)
+
+	var idx_scroll := ScrollContainer.new()
+	idx_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	idx_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	idx_panel.add_child(idx_scroll)
+
+	_book_chapters_vbox = VBoxContainer.new()
+	_book_chapters_vbox.add_theme_constant_override("separation", 3)
+	_book_chapters_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	idx_scroll.add_child(_book_chapters_vbox)
+
+	var page_panel := PanelContainer.new()
+	page_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page_panel.add_theme_stylebox_override("panel", _make_flat_style(Color("#fbf2dc"), Color("#b89563"), 1, 8, 6, 3))
+	body_hbox.add_child(page_panel)
+
+	var page_vbox := VBoxContainer.new()
+	page_vbox.add_theme_constant_override("separation", 4)
+	page_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	page_panel.add_child(page_vbox)
+
+	_book_chapter_title_label = _make_label("", 9, COL_WOOD_DARK)
+	_book_chapter_title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page_vbox.add_child(_book_chapter_title_label)
+
+	_book_chapter_subtitle_label = _make_label("", 7, COL_GOLD_TEXT)
+	page_vbox.add_child(_book_chapter_subtitle_label)
+
+	page_vbox.add_child(_make_separator())
+
+	var text_scroll := ScrollContainer.new()
+	text_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	text_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	page_vbox.add_child(text_scroll)
+
+	_book_page_body_label = _make_label("", 8, COL_INK)
+	_book_page_body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_book_page_body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text_scroll.add_child(_book_page_body_label)
+
+	# Footer navigation
+	main_vbox.add_child(_make_separator())
+
+	var footer := HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 6)
+	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_vbox.add_child(footer)
+
+	_book_status_label = _make_label("♥ +10 Energia na 1ª leitura do dia", 7, COL_INK_MUTED)
+	_book_status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(_book_status_label)
+
+	_book_prev_btn = _make_wood_button("◀ Ant.", Vector2(56, 18), 7)
+	_book_prev_btn.pressed.connect(func() -> void: _flip_book_page(-1))
+	footer.add_child(_book_prev_btn)
+
+	_book_page_counter_label = _make_label("1/1", 8, COL_WOOD_DARK)
+	_book_page_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_book_page_counter_label.custom_minimum_size = Vector2(32, 0)
+	footer.add_child(_book_page_counter_label)
+
+	_book_next_btn = _make_wood_button("Próx. ▶", Vector2(56, 18), 7)
+	_book_next_btn.pressed.connect(func() -> void: _flip_book_page(1))
+	footer.add_child(_book_next_btn)
+
+
+func _select_book_chapter(chapter_id: String) -> void:
+	_play_click()
+	_book_current_chapter = chapter_id
+	_book_current_page = 0
+	var gs := _get_game_state()
+	if gs != null and gs.has_method("is_book_chapter_unlocked") and bool(gs.call("is_book_chapter_unlocked", chapter_id)):
+		if gs.has_method("mark_book_chapter_read"):
+			gs.call("mark_book_chapter_read", chapter_id)
+	_refresh_storybook()
+
+
+func _flip_book_page(delta: int) -> void:
+	if not StoryDataScript.BOOK_CHAPTERS.has(_book_current_chapter):
+		return
+	var ch: Dictionary = StoryDataScript.BOOK_CHAPTERS[_book_current_chapter]
+	var pages: Array = ch.get("pages", [])
+	if pages.is_empty():
+		return
+	var nxt: int = clampi(_book_current_page + delta, 0, pages.size() - 1)
+	if nxt != _book_current_page:
+		_play_click()
+		_book_current_page = nxt
+		_refresh_storybook()
+
+
+func _refresh_storybook() -> void:
+	if _book_panel == null or _book_chapters_vbox == null:
+		return
+	var gs := _get_game_state()
+	_clear_children(_book_chapters_vbox)
+
+	var total_caps: int = StoryDataScript.BOOK_CHAPTER_ORDER.size()
+	var unlocked_cnt: int = int(gs.call("get_unlocked_book_count")) if gs != null and gs.has_method("get_unlocked_book_count") else 2
+	var read_list: Array = gs.get("book_chapters_read") if gs != null and gs.get("book_chapters_read") != null else []
+	var bonus_claimed: bool = bool(gs.get("book_bonus_claimed_today")) if gs != null else false
+
+	if _book_progress_label != null:
+		_book_progress_label.text = "%d/%d desbl." % [unlocked_cnt, total_caps]
+
+	for cid in StoryDataScript.BOOK_CHAPTER_ORDER:
+		var ch: Dictionary = StoryDataScript.BOOK_CHAPTERS[cid]
+		var is_unlocked: bool = bool(gs.call("is_book_chapter_unlocked", cid)) if gs != null and gs.has_method("is_book_chapter_unlocked") else (str(ch.get("unlock_type", "")) == "always")
+		var is_read: bool = read_list.has(cid)
+		var is_selected: bool = (cid == _book_current_chapter)
+		var prefix: String = "✓ " if (is_unlocked and is_read) else ("★ " if is_unlocked else "🔒 ")
+		var short_t: String = str(ch.get("short_title", ch.get("title", cid)))
+		var btn := _make_wood_button(prefix + short_t, Vector2(114, 21), 7)
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_apply_tab_style(btn, is_selected)
+		if not is_unlocked:
+			btn.modulate = Color(0.82, 0.78, 0.72, 0.85)
+		btn.pressed.connect(_select_book_chapter.bind(cid))
+		_book_chapters_vbox.add_child(btn)
+
+	var cur_ch: Dictionary = StoryDataScript.BOOK_CHAPTERS.get(_book_current_chapter, StoryDataScript.BOOK_CHAPTERS[StoryDataScript.BOOK_CHAPTER_ORDER[0]])
+	var cur_unlocked: bool = bool(gs.call("is_book_chapter_unlocked", _book_current_chapter)) if gs != null and gs.has_method("is_book_chapter_unlocked") else true
+
+	if cur_unlocked:
+		var pages: Array = cur_ch.get("pages", [])
+		var page_count: int = maxi(1, pages.size())
+		_book_current_page = clampi(_book_current_page, 0, page_count - 1)
+		_book_chapter_title_label.text = str(cur_ch.get("title", ""))
+		_book_chapter_subtitle_label.text = str(cur_ch.get("subtitle", ""))
+		_book_page_body_label.text = str(pages[_book_current_page]) if not pages.is_empty() else ""
+		_book_page_counter_label.text = "%d/%d" % [_book_current_page + 1, page_count]
+		_book_prev_btn.disabled = (_book_current_page <= 0)
+		_book_next_btn.disabled = (_book_current_page >= page_count - 1)
+	else:
+		_book_chapter_title_label.text = "Capítulo Bloqueado"
+		_book_chapter_subtitle_label.text = str(cur_ch.get("title", ""))
+		_book_page_body_label.text = "Esta história do Sítio ainda não foi descoberta.\n\nComo desbloquear:\n" + str(cur_ch.get("unlock_hint", ""))
+		_book_page_counter_label.text = "—/—"
+		_book_prev_btn.disabled = true
+		_book_next_btn.disabled = true
+
+	if _book_status_label != null:
+		_book_status_label.text = "♥ Leitura de hoje registrada (+10 Energia) ✓" if bonus_claimed else "♥ Leia um capítulo para ganhar +10 Energia hoje!"
 
 
 func _build_menu_modal() -> void:
@@ -2744,6 +3035,28 @@ func _refresh_journal() -> void:
 		var quests_state: Dictionary = gs.get("story_quests")
 		var hearts: Dictionary = gs.get("npc_hearts")
 		var discovered_fk: Array = gs.get("folklore_discovered")
+		var book_unlocked: int = int(gs.call("get_unlocked_book_count")) if gs.has_method("get_unlocked_book_count") else 2
+		var book_total: int = StoryDataScript.BOOK_CHAPTER_ORDER.size()
+
+		var book_card := PanelContainer.new()
+		book_card.add_theme_stylebox_override("panel", _make_flat_style(Color("#fbf2dc"), COL_WOOD_BORDER, 1, 6, 4, 2))
+		_journal_content_vbox.add_child(book_card)
+		var book_row := HBoxContainer.new()
+		book_row.add_theme_constant_override("separation", 6)
+		book_card.add_child(book_row)
+		var book_info := VBoxContainer.new()
+		book_info.add_theme_constant_override("separation", 1)
+		book_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		book_row.add_child(book_info)
+		book_info.add_child(_make_label("Livro de Histórias do Sítio (%d/%d cap.)" % [book_unlocked, book_total], 8, COL_WOOD_DARK))
+		book_info.add_child(_make_label("Contos de Dona Benta, Emília, Visconde & Folclore (+10 Energia/dia)", 7, COL_INK_MUTED))
+		var open_book_btn := _make_wood_button("Ler Livro", Vector2(68, 19), 7)
+		open_book_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		open_book_btn.pressed.connect(func() -> void:
+			_play_click()
+			open_storybook()
+		)
+		book_row.add_child(open_book_btn)
 
 		_journal_content_vbox.add_child(_make_label("Crônicas & Missões Coloniais", 8, COL_WOOD_DARK))
 		for q_id in StoryDataScript.QUEST_ORDER:
