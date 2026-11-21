@@ -471,6 +471,8 @@ def generate_villagers() -> None:
         ("villager_sinha.png", (214, 164, 124, 255), (58, 40, 32, 255), (166, 68, 86, 255), (132, 50, 68, 255), None, (244, 236, 224, 255), True),
         ("villager_ze.png", (206, 156, 114, 255), (48, 34, 26, 255), (238, 228, 208, 255), (76, 56, 44, 255), (96, 52, 38, 255), (154, 54, 48, 255), False),
         ("villager_chico.png", (192, 142, 100, 255), (62, 46, 34, 255), (206, 148, 66, 255), (84, 72, 54, 255), (216, 186, 112, 255), (124, 74, 42, 255), False),
+        ("villager_pedrinho.png", (222, 174, 134, 255), (76, 48, 30, 255), (76, 152, 214, 255), (96, 72, 48, 255), (232, 206, 128, 255), (242, 240, 224, 255), False),
+        ("villager_mariquinha.png", (204, 152, 112, 255), (48, 32, 24, 255), (234, 122, 146, 255), (196, 86, 112, 255), None, (248, 242, 226, 255), True),
     ]
     for filename, skin, hair, shirt, pants, hat, accent, is_dress in specs:
         sheet = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
@@ -478,6 +480,49 @@ def generate_villagers() -> None:
             for col in range(4):
                 draw_villager_frame(sheet, col, row, skin, hair, shirt, pants, hat, accent, is_dress)
         sheet.save(OUT_DIR / filename)
+
+
+def generate_mina_entrada() -> None:
+    img = Image.new("RGBA", (48, 40), (0, 0, 0, 0))
+    rect(img, 4, 34, 43, 38, SHADOW)
+    # Rochedo externo
+    rect(img, 4, 8, 43, 35, OUTLINE)
+    rect(img, 5, 9, 42, 34, STONE_DARK)
+    rect(img, 8, 5, 39, 12, STONE_MID)
+    rect(img, 10, 9, 37, 15, STONE_MID)
+    # Abertura escura da gruta com vigas de madeira
+    rect(img, 14, 15, 33, 35, WOOD_DARK)
+    rect(img, 16, 17, 31, 35, (22, 18, 20, 255))
+    rect(img, 13, 14, 34, 17, WOOD_MID)
+    rect(img, 14, 15, 33, 16, WOOD_LIGHT)
+    # Brilhos dourados nas pedras
+    px(img, 9, 20, GOLD)
+    px(img, 10, 21, GOLD)
+    px(img, 38, 18, GOLD)
+    px(img, 39, 19, GOLD)
+    # Tocha na lateral
+    rect(img, 11, 24, 12, 30, WOOD_MID)
+    rect(img, 10, 21, 13, 24, (255, 168, 36, 255))
+    img.save(OUT_DIR / "mina_entrada.png")
+
+
+def generate_arvore_frutifera() -> None:
+    img = Image.new("RGBA", (32, 36), (0, 0, 0, 0))
+    rect(img, 8, 31, 23, 34, SHADOW)
+    # Tronco
+    rect(img, 13, 20, 18, 32, OUTLINE)
+    rect(img, 14, 21, 17, 31, WOOD_MID)
+    rect(img, 15, 21, 16, 31, WOOD_LIGHT)
+    # Copa frondosa verde
+    rect(img, 5, 6, 26, 22, OUTLINE)
+    rect(img, 6, 7, 25, 21, (48, 124, 52, 255))
+    rect(img, 8, 4, 23, 18, (68, 154, 66, 255))
+    rect(img, 10, 6, 21, 13, (96, 182, 84, 255))
+    # Frutas douradas/alaranjadas coloniais
+    for fx, fy in [(9, 12), (16, 9), (22, 14), (13, 17), (19, 18)]:
+        rect(img, fx, fy, fx + 2, fy + 2, (244, 154, 38, 255))
+        px(img, fx, fy, (255, 226, 104, 255))
+    img.save(OUT_DIR / "arvore_frutifera.png")
 
 
 def main() -> None:
@@ -492,6 +537,8 @@ def main() -> None:
     generate_coreto()
     generate_ponte_madeira()
     generate_placa_direcao()
+    generate_mina_entrada()
+    generate_arvore_frutifera()
     generate_villagers()
     print(f"Sprites da vila e moradores gerados com sucesso em {OUT_DIR}")
 

@@ -11,6 +11,7 @@ const FarmCatalogScript := preload("res://scripts/data/farm_catalog.gd")
 const SeasonDataScript := preload("res://scripts/data/season_data.gd")
 const StoryDataScript := preload("res://scripts/data/story_data.gd")
 const MinimapModalScript := preload("res://scripts/ui/minimap_modal.gd")
+const CookingModalScript := preload("res://scripts/ui/cooking_modal.gd")
 
 const FALLBACK_VERSION := "v1.6.2"
 const FALLBACK_AUTHOR := "@marlonferreira1800-hue (Marlon Ferreira)"
@@ -219,6 +220,8 @@ var _touch_dir_active := Vector2.ZERO
 var _minimap_modal: Control = null
 var _minimap_open: bool = false
 var _minimap_refresh_acc: float = 0.0
+var _cooking_modal: Control = null
+var _cooking_open: bool = false
 
 
 func _load_texture_safe(res_path: String) -> Texture2D:
@@ -256,6 +259,12 @@ func _ready() -> void:
 		if _minimap_modal.has_signal("close_requested"):
 			_minimap_modal.close_requested.connect(func() -> void: _set_minimap_open(false))
 		add_child(_minimap_modal)
+	_cooking_modal = CookingModalScript.new() as Control
+	if _cooking_modal != null:
+		_cooking_modal.name = "CookingModal"
+		if _cooking_modal.has_signal("close_requested"):
+			_cooking_modal.close_requested.connect(func() -> void: _set_cooking_open(false))
+		add_child(_cooking_modal)
 	_connect_signals()
 	_sync_all_from_state()
 
@@ -305,7 +314,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if (InputMap.has_action("ui_cancel") and event.is_action_pressed("ui_cancel")) or (key_pressed and keycode == KEY_ESCAPE):
 		_play_click()
-		if _minimap_open:
+		if _cooking_open:
+			_set_cooking_open(false)
+		elif _minimap_open:
 			_set_minimap_open(false)
 		elif _book_open:
 			_set_book_open(false)
@@ -451,6 +462,7 @@ func close_all_modals() -> void:
 	_set_changelog_open(false)
 	_set_menu_open(false)
 	_set_minimap_open(false)
+	_set_cooking_open(false)
 	if _dialogue_open:
 		_dialogue_open = false
 		_dialogue_on_close = Callable()
@@ -459,7 +471,32 @@ func close_all_modals() -> void:
 
 
 func is_shop_open() -> bool:
-	return _shop_open or _changelog_open or _menu_open or _journal_open or _book_open or _dialogue_open or _minimap_open
+	return _shop_open or _changelog_open or _menu_open or _journal_open or _book_open or _dialogue_open or _minimap_open or _cooking_open
+
+
+func open_cooking() -> void:
+	_set_cooking_open(true)
+
+
+func _set_cooking_open(open: bool) -> void:
+	if open:
+		if _shop_open:
+			_set_shop_open(false)
+		if _journal_open:
+			_set_journal_open(false)
+		if _book_open:
+			_set_book_open(false)
+		if _changelog_open:
+			_set_changelog_open(false)
+		if _menu_open:
+			_set_menu_open(false)
+		if _minimap_open:
+			_set_minimap_open(false)
+	_cooking_open = open
+	if _cooking_modal != null:
+		_cooking_modal.visible = _cooking_open
+		if _cooking_open and _cooking_modal.has_method("refresh"):
+			_cooking_modal.call("refresh")
 
 
 func toggle_minimap() -> void:

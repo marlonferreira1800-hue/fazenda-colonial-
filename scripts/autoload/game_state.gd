@@ -4,6 +4,7 @@ extends Node
 const CropDataScript := preload("res://scripts/data/crop_data.gd")
 const FarmCatalogScript := preload("res://scripts/data/farm_catalog.gd")
 const SeasonDataScript := preload("res://scripts/data/season_data.gd")
+const CookingDataScript := preload("res://scripts/data/cooking_data.gd")
 
 signal money_changed(new_money: int)
 signal day_changed(day: int, time_minutes: float)
@@ -143,6 +144,20 @@ var artisan: Dictionary = {
 var supplies: Dictionary = {
 	"fertilizer": 2,
 }
+var cooked_dishes: Dictionary = {
+	"caldo_cana": 0,
+	"cafe_coado": 0,
+	"bolo_fuba": 0,
+	"peixe_assado": 0,
+	"pao_de_queijo": 0,
+}
+var minerals: Dictionary = {
+	"pedra": 0,
+	"ferro": 0,
+	"ouro_colonial": 0,
+}
+var unlocked_plots: Array[String] = []
+var pet_type: String = ""
 var story_quests: Dictionary = {}
 var npc_hearts: Dictionary = {
 	"padre": 0,
@@ -1300,6 +1315,10 @@ func save_game(show_toast: bool = true) -> bool:
 		"fish": fish.duplicate(true),
 		"artisan": artisan.duplicate(true),
 		"supplies": supplies.duplicate(true),
+		"cooked_dishes": cooked_dishes.duplicate(true),
+		"minerals": minerals.duplicate(true),
+		"unlocked_plots": unlocked_plots.duplicate(true),
+		"pet_type": pet_type,
 		"gold_items": gold_items.duplicate(true),
 		"owned_machines": owned_machines.duplicate(true),
 		"machine_states": machine_states.duplicate(true),
@@ -1389,6 +1408,14 @@ func load_game() -> bool:
 	_load_dict_int_keys(fish, data.get("fish", {}))
 	_load_dict_int_keys(artisan, data.get("artisan", {}))
 	_load_dict_int_keys(supplies, data.get("supplies", {}))
+	_load_dict_int_keys(cooked_dishes, data.get("cooked_dishes", {}))
+	_load_dict_int_keys(minerals, data.get("minerals", {}))
+	unlocked_plots.clear()
+	var loaded_plots: Variant = data.get("unlocked_plots", [])
+	if loaded_plots is Array:
+		for pid in (loaded_plots as Array):
+			unlocked_plots.append(str(pid))
+	pet_type = str(data.get("pet_type", ""))
 
 	story_quests.clear()
 	var loaded_sq = data.get("story_quests", {})
@@ -1532,6 +1559,20 @@ func reset_save() -> void:
 	supplies = {
 		"fertilizer": 2,
 	}
+	cooked_dishes = {
+		"caldo_cana": 0,
+		"cafe_coado": 0,
+		"bolo_fuba": 0,
+		"peixe_assado": 0,
+		"pao_de_queijo": 0,
+	}
+	minerals = {
+		"pedra": 0,
+		"ferro": 0,
+		"ouro_colonial": 0,
+	}
+	unlocked_plots.clear()
+	pet_type = ""
 	story_quests.clear()
 	npc_hearts = {"padre": 0, "ferreiro": 0, "quiteria": 0}
 	npc_talked_today.clear()
@@ -1563,3 +1604,136 @@ func reset_save() -> void:
 	inventory_changed.emit()
 	game_reset.emit()
 	emit_toast("Fazenda reiniciada para o Dia 1!")
+
+
+# --- Culinária Colonial, Lojas da Vila, Mineração e Lotes ---
+
+func _get_bucket_dict(bucket_name: String) -> Dictionary:
+	match bucket_name:
+		"harvested":
+			return harvested
+		"animal_products":
+			return animal_products
+		"fish":
+			return fish
+		"artisan":
+			return artisan
+		"minerals":
+			return minerals
+		_:
+			return {}
+
+
+func can_cook_recipe(recipe_id: String) -> bool:
+	if not CookingDataScript.RECIPES.has(recipe_id):
+		return false
+	var rec: Dictionary = CookingDataScript.RECIPES[recipe_id]
+	var ing_val: Variant = rec.get("ingredients", [])
+	if not (ing_val is Array):
+		return false
+	for ing_var in (ing_val as Array):
+		if not (ing_var is Dictionary):
+			continue
+		var ing := ing_var as Dictionary
+		var d: Dictionary = _get_bucket_dict(str(ing.get("bucket", "")))
+		var need: int = int(ing.get("qty", 1))
+		if int(d.get(str(ing.get("id", "")), 0)) < need:
+			return false
+	return true
+
+
+func cook_recipe(recipe_id: String) -> bool:
+	if not can_cook_recipe(recipe_id):
+		emit_toast("Ingredientes insuficientes para esta receita!")
+		return false
+	var rec: Dictionary = CookingDataScript.RECIPES[recipe_id]
+	var ing_val: Variant = rec.get("ingredients", [])
+	if ing_val is Array:
+		for ing_var in (ing_val as Array):
+			if not (ing_var is Dictionary):
+				continue
+			var ing := ing_var as Dictionary
+			var d: Dictionary = _get_bucket_dict(str(ing.get("bucket", "")))
+			var k: String = str(ing.get("id", ""))
+			d[k] = maxi(0, int(d.get(k, 0)) - int(ing.get("qty", 1)))
+	cooked_dishes[recipe_id] = int(cooked_dishes.get(recipe_id, 0)) + 1
+	inventory_changed.emit()
+	emit_toast("Preparou %s no fogão de lenha!" % str(rec.get("name", recipe_id)))
+	return true
+
+
+func eat_cooked_dish(recipe_id: String) -> bool:
+	if int(cooked_dishes.get(recipe_id, 0)) <= 0 or not CookingDataScript.RECIPES.has(recipe_id):
+		return false
+	var rec: Dictionary = CookingDataScript.RECIPES[recipe_id]
+	cooked_dishes[recipe_id] = int(cooked_dishes[recipe_id]) - 1
+	var gain: int = int(rec.get("energy", 25))
+	stamina = mini(max_stamina, stamina + gain)
+	stamina_changed.emit(stamina, max_stamina)
+	inventory_changed.emit()
+	emit_toast("Delícia! Comeu %s (+%d Energia)." % [str(rec.get("name", recipe_id)), gain])
+	return true
+
+
+func sell_cooked_dish(recipe_id: String) -> bool:
+	if int(cooked_dishes.get(recipe_id, 0)) <= 0 or not CookingDataScript.RECIPES.has(recipe_id):
+		return false
+	var rec: Dictionary = CookingDataScript.RECIPES[recipe_id]
+	cooked_dishes[recipe_id] = int(cooked_dishes[recipe_id]) - 1
+	var price: int = int(rec.get("sell_price", 50))
+	money += price
+	money_changed.emit(money)
+	inventory_changed.emit()
+	emit_toast("Vendeu %s por Rs %d!" % [str(rec.get("name", recipe_id)), price])
+	return true
+
+
+func buy_instant_energy(cost: int, energy_gain: int, label_name: String) -> bool:
+	if money < cost:
+		emit_toast("Réis insuficientes! Precisa de Rs %d." % cost)
+		return false
+	money -= cost
+	stamina = mini(max_stamina, stamina + energy_gain)
+	money_changed.emit(money)
+	stamina_changed.emit(stamina, max_stamina)
+	emit_toast("Comprou %s! (+%d Energia)" % [label_name, energy_gain])
+	return true
+
+
+func add_mineral(mineral_id: String, qty: int = 1) -> void:
+	minerals[mineral_id] = int(minerals.get(mineral_id, 0)) + qty
+	inventory_changed.emit()
+
+
+func sell_all_minerals(bonus_mult: float = 1.0) -> int:
+	var prices: Dictionary = {"pedra": 18, "ferro": 55, "ouro_colonial": 165}
+	var total: int = 0
+	for k in minerals.keys():
+		var q: int = int(minerals.get(k, 0))
+		if q > 0:
+			total += int(round(float(q * int(prices.get(k, 15))) * bonus_mult))
+			minerals[k] = 0
+	if total <= 0:
+		emit_toast("Sem minérios na sacola! Visite a Mina do Ouro Colonial.")
+		return 0
+	money += total
+	money_changed.emit(money)
+	inventory_changed.emit()
+	emit_toast("Vendeu minérios por Rs %d!" % total)
+	return total
+
+
+func buy_farm_plot(plot_id: String, cost: int, plot_name: String) -> bool:
+	if plot_id in unlocked_plots:
+		return false
+	if money < cost:
+		emit_toast("Réis insuficientes para %s (Rs %d)." % [plot_name, cost])
+		return false
+	money -= cost
+	unlocked_plots.append(plot_id)
+	money_changed.emit(money)
+	emit_toast("Escritura assinada! %s desbloqueado para plantio!" % plot_name)
+	if auto_save_enabled:
+		save_game(false)
+	return true
+

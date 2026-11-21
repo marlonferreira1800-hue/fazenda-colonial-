@@ -9,6 +9,9 @@ const VillageDataScript := preload("res://scripts/data/village_data.gd")
 const VillagerScript := preload("res://scripts/world/villager.gd")
 const StoryDataScript := preload("res://scripts/data/story_data.gd")
 const VillageWorldScript := preload("res://scripts/world/village_world.gd")
+const VillageInteriorScript := preload("res://scripts/world/village_interior.gd")
+const MineInteriorScript := preload("res://scripts/world/mine_interior.gd")
+const PetCompanionScript := preload("res://scripts/world/pet_companion.gd")
 
 const TILE_SIZE: int = 16
 const MAP_WIDTH: int = 68
@@ -26,6 +29,16 @@ const TILE_SHIPPING_BIN := Vector2i(3, 1)
 
 # Key world positions in tile coordinates
 const ARABLE_RECT := Rect2i(12, 9, 12, 7)
+const EXTRA_PLOTS: Dictionary = {
+	"pomar_oeste": {"name": "Lote do Pomar Oeste", "rect": Rect2i(11, 20, 5, 4), "sign_tile": Vector2i(10, 22), "cost": 450},
+	"estrada_sul": {"name": "Lote da Estrada Real", "rect": Rect2i(20, 21, 5, 4), "sign_tile": Vector2i(25, 22), "cost": 750},
+}
+const ORCHARD_TREES: Array[Dictionary] = [
+	{"id": "manga", "name": "Mangueira", "fruit": "Manga Colonial", "tile": Vector2i(5, 32), "price": 28, "energy": 12},
+	{"id": "jabuticaba", "name": "Jabuticabeira", "fruit": "Jabuticaba", "tile": Vector2i(8, 32), "price": 32, "energy": 14},
+	{"id": "goiaba", "name": "Goiabeira", "fruit": "Goiaba", "tile": Vector2i(11, 32), "price": 26, "energy": 12},
+	{"id": "laranja", "name": "Laranjeira", "fruit": "Laranja-da-Terra", "tile": Vector2i(14, 32), "price": 30, "energy": 14},
+]
 const SHIPPING_BIN_TILE := Vector2i(10, 5)
 const SHOP_SIGN_TILE := Vector2i(12, 5)
 const ORDER_BOARD_TILE := Vector2i(13, 5)
@@ -49,6 +62,17 @@ const HOUSE_DOOR_TILES: Array[Vector2i] = [
 ]
 const HOUSE_ORIGIN := Vector2(2000.0, 0.0)
 const VILLAGE_ORIGIN := Vector2(2800.0, 0.0)
+const VILLAGE_INTERIOR_ORIGIN := Vector2(3600.0, 0.0)
+const MINE_ORIGIN := Vector2(4400.0, 0.0)
+const MINE_DOOR_POS := Vector2(56.5 * 16.0, 3.8 * 16.0)
+const MINE_EXIT_SPAWN_POS := Vector2(56.5 * 16.0, 5.1 * 16.0)
+const PET_ADOPT_POS := Vector2(50.5 * 16.0, 14.8 * 16.0)
+const VILLAGE_DOORS: Dictionary = {
+	"venda": {"pos": Vector2(44.5 * 16.0, 8.0 * 16.0), "exit": Vector2(44.5 * 16.0, 8.7 * 16.0), "label": "Entrar na Venda"},
+	"ferraria": {"pos": Vector2(52.5 * 16.0, 8.0 * 16.0), "exit": Vector2(52.5 * 16.0, 8.7 * 16.0), "label": "Entrar na Ferraria"},
+	"botica": {"pos": Vector2(60.5 * 16.0, 8.0 * 16.0), "exit": Vector2(60.5 * 16.0, 8.7 * 16.0), "label": "Entrar na Botica"},
+	"estalagem": {"pos": Vector2(60.5 * 16.0, 19.8 * 16.0), "exit": Vector2(60.5 * 16.0, 20.5 * 16.0), "label": "Entrar na Estalagem"},
+}
 const VILLAGE_EXIT_FARM_POS := Vector2(288.0, 520.0)
 const SACI_POS := Vector2(158.0, 224.0)
 const MULA_POS := Vector2(256.0, 332.0)
@@ -132,6 +156,11 @@ var _lamp_glows: Array[Sprite2D] = []
 var _tropeiro_body: StaticBody2D = null
 var _tropeiro_present: bool = false
 var _village_world: Node2D = null
+var _village_interior: Node2D = null
+var _active_village_interior_id: String = ""
+var _mine_interior: Node2D = null
+var _pet_companion: Node2D = null
+var _orchard_harvested_today: Dictionary = {}
 var _folklore_nodes: Dictionary = {}
 var _guide_tip_index: int = 0
 var _entered_house_once: bool = false
@@ -206,6 +235,7 @@ class WeatherFxNode extends Node2D:
 	]
 	var smoke_puffs: Array[Dictionary] = []
 	var butterflies: Array[Dictionary] = []
+	var birds: Array[Dictionary] = []
 	var _time_acc: float = 0.0
 	var _smoke_timer: float = 0.0
 	var _rng := RandomNumberGenerator.new()
@@ -236,6 +266,12 @@ class WeatherFxNode extends Node2D:
 				"phase": _rng.randf_range(0.0, TAU),
 				"color": b_colors[i],
 			})
+		for i in range(4):
+			birds.append({
+				"pos": Vector2(_rng.randf_range(200.0, WORLD_W - 100.0), _rng.randf_range(120.0, 460.0)),
+				"vx": _rng.randf_range(22.0, 34.0) * (1.0 if i % 2 == 0 else -1.0),
+				"phase": _rng.randf_range(0.0, TAU),
+			})
 
 	func _process(delta: float) -> void:
 		_time_acc += delta
@@ -262,6 +298,17 @@ class WeatherFxNode extends Node2D:
 					bp.x = WORLD_W - 30.0
 				bp.y = clampf(bp.y, 60.0, WORLD_H - 50.0)
 				b["pos"] = bp
+
+		if not is_rainy:
+			for brd in birds:
+				var p2: Vector2 = brd["pos"]
+				p2.x += float(brd["vx"]) * delta
+				p2.y += sin(_time_acc * 1.8 + float(brd["phase"])) * 5.0 * delta
+				if p2.x > WORLD_W + 24.0:
+					p2.x = -24.0
+				elif p2.x < -24.0:
+					p2.x = WORLD_W + 24.0
+				brd["pos"] = p2
 
 		_smoke_timer += delta
 		if _smoke_timer >= 0.65:
@@ -306,6 +353,14 @@ class WeatherFxNode extends Node2D:
 			draw_rect(Rect2(jx, drop_y, 1.5, 2.0), Color(0.82, 0.96, 1.0, 0.85))
 			var rip: float = 1.5 + absf(sin(_time_acc * 5.0 + float(jet_idx))) * 2.0
 			draw_rect(Rect2(jx - rip * 0.5, 174.5, rip, 1.0), Color(0.86, 0.98, 1.0, 0.65))
+
+		# Garças / Pássaros tropicais planando sobre o Ribeirão e o Lago
+		if not is_rainy:
+			for brd in birds:
+				var p2: Vector2 = brd["pos"]
+				var flap_y: float = sin(_time_acc * 8.5 + float(brd["phase"])) * 2.4
+				draw_line(p2 + Vector2(-4.0, flap_y), p2, Color(0.96, 0.96, 0.92, 0.88), 1.3)
+				draw_line(p2, p2 + Vector2(4.0, flap_y), Color(0.96, 0.96, 0.92, 0.88), 1.3)
 
 		# Tropical butterflies in sunny weather
 		if not is_rainy and not is_winter:
@@ -444,6 +499,8 @@ func _ready() -> void:
 	_spawn_villagers()
 	_setup_house_interior()
 	_setup_village_world()
+	_setup_village_interior()
+	_setup_mine_and_pet()
 
 	if player != null:
 		player.global_position = Vector2(136.0, 118.0)
@@ -535,12 +592,25 @@ func _process(delta: float) -> void:
 				_enter_house()
 			elif moving_down and absf(p_pos.x - 288.0) <= 24.0 and p_pos.y >= 544.0:
 				_enter_village()
+			elif moving_up:
+				if p_pos.distance_to(MINE_DOOR_POS) <= 22.0:
+					_enter_mine()
+				else:
+					var near_door_id: String = _find_nearby_village_door(p_pos, 16.0)
+					if not near_door_id.is_empty():
+						_enter_village_interior(near_door_id)
 		elif _current_location == "house" and _house_interior != null:
 			if moving_down and bool(_house_interior.call("is_at_exit_threshold", player.global_position)):
 				_exit_house()
 		elif _current_location == "village" and _village_world != null:
 			if moving_up and bool(_village_world.call("is_at_exit_threshold", player.global_position)):
 				_exit_village()
+		elif _current_location == "village_interior" and _village_interior != null:
+			if moving_down and bool(_village_interior.call("is_at_exit_threshold", player.global_position)):
+				_exit_village_interior()
+		elif _current_location == "mine" and _mine_interior != null:
+			if moving_down and bool(_mine_interior.call("is_at_exit_threshold", player.global_position)):
+				_exit_mine()
 
 	if _current_location == "farm":
 		_update_region_banner()
@@ -659,6 +729,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _game_state != null:
 			_game_state.call("advance_day")
 		get_viewport().set_input_as_handled()
+		return
+
+	if _current_location == "mine":
+		if event.is_action_pressed("action_interact") or event.is_action_pressed("action_use"):
+			_handle_mine_interact()
+			get_viewport().set_input_as_handled()
+			return
+		return
+
+	if _current_location == "village_interior":
+		if event.is_action_pressed("action_interact") or event.is_action_pressed("action_use"):
+			_handle_village_interior_interact()
+			get_viewport().set_input_as_handled()
+			return
 		return
 
 	if _current_location == "village":
@@ -1378,6 +1462,38 @@ func _spawn_buildings_and_props() -> void:
 			"PlacaDirecao_%d" % idx,
 			"res://assets/sprites/colonial_buildings_px/placa_direcao.png",
 			sign_positions[idx],
+			Vector2(0.0, -10.0),
+			Rect2(0.0, -3.0, 10.0, 8.0)
+		)
+
+	# Entrada da Mina / Gruta do Ouro Colonial (nordeste, acima da Ferraria/Botica)
+	_spawn_colonial_building(
+		"MinaOuroEntrada",
+		"res://assets/sprites/colonial_buildings_px/mina_entrada.png",
+		Vector2(56.5 * TILE_SIZE, 3.6 * TILE_SIZE),
+		Vector2(0.0, -16.0),
+		Rect2(0.0, -10.0, 38.0, 16.0)
+	)
+
+	# Pomar Colonial de Árvores Frutíferas no Vale Sul (colheita diária)
+	for ot in ORCHARD_TREES:
+		var ot_tile: Vector2i = ot["tile"]
+		_spawn_colonial_building(
+			"OrchardTree_%s" % str(ot["id"]),
+			"res://assets/sprites/colonial_buildings_px/arvore_frutifera.png",
+			Vector2(ot_tile.x * TILE_SIZE + 8.0, ot_tile.y * TILE_SIZE + 12.0),
+			Vector2(0.0, -16.0),
+			Rect2(0.0, -4.0, 14.0, 10.0)
+		)
+
+	# Placas de escritura para lotes extras compráveis
+	for pid in EXTRA_PLOTS.keys():
+		var p_def: Dictionary = EXTRA_PLOTS[pid]
+		var st: Vector2i = p_def["sign_tile"]
+		_spawn_colonial_building(
+			"PlotSign_%s" % str(pid),
+			"res://assets/sprites/colonial_buildings_px/placa_direcao.png",
+			Vector2(st.x * TILE_SIZE + 8.0, st.y * TILE_SIZE + 12.0),
 			Vector2(0.0, -10.0),
 			Rect2(0.0, -3.0, 10.0, 8.0)
 		)
@@ -2133,8 +2249,40 @@ func _handle_interact() -> void:
 		_enter_house()
 		return
 
-	# Check proximity to Shop Sign or Venda Secos & Molhados in the Village
-	if p_pos.distance_to(_tile_center(SHOP_SIGN_TILE)) <= 28.0 or p_pos.distance_to(_tile_center(VENDA_TILE)) <= 32.0:
+	# Check proximity to Village playable doors (Venda, Ferraria, Botica, Estalagem)
+	var v_door_id: String = _find_nearby_village_door(p_pos, 26.0)
+	if not v_door_id.is_empty():
+		_enter_village_interior(v_door_id)
+		return
+
+	# Check proximity to Colonial Gold Mine entrance
+	if p_pos.distance_to(MINE_DOOR_POS) <= 30.0:
+		_enter_mine()
+		return
+
+	# Check proximity to Buyable Plot Sign
+	var near_plot_id: String = _find_nearby_plot_sign(p_pos, 26.0)
+	if not near_plot_id.is_empty():
+		var p_def: Dictionary = EXTRA_PLOTS[near_plot_id]
+		if bool(_game_state.call("buy_farm_plot", near_plot_id, int(p_def["cost"]), str(p_def["name"]))):
+			_play_sfx("play_coin")
+			_spawn_particles(p_pos, Color(0.62, 0.96, 0.45))
+		return
+
+	# Check proximity to Fruit Orchard Tree
+	var near_tree: Dictionary = _find_nearby_orchard_tree(p_pos, 28.0)
+	if not near_tree.is_empty():
+		_harvest_orchard_tree(near_tree)
+		return
+
+	# Check proximity to Caramelo Pet Companion
+	if _pet_companion != null and is_instance_valid(_pet_companion) and _pet_companion.visible:
+		if p_pos.distance_to(_pet_companion.global_position) <= 26.0:
+			_interact_with_pet()
+			return
+
+	# Check proximity to Shop Sign
+	if p_pos.distance_to(_tile_center(SHOP_SIGN_TILE)) <= 28.0:
 		if hud != null and hud.has_method("toggle_shop"):
 			hud.call("toggle_shop")
 		return
@@ -2433,7 +2581,7 @@ func _use_hoe(target_tile: Vector2i) -> void:
 	var candidate_tiles: Array[Vector2i] = _get_tool_area_tiles(target_tile, hoe_lvl)
 	var valid_tiles: Array[Vector2i] = []
 	for t in candidate_tiles:
-		if not ARABLE_RECT.has_point(t):
+		if not _is_tile_arable(t):
 			continue
 		if obstacle_layer.get_cell_source_id(t) != -1 or _crops.has(t) or _sprinklers.has(t):
 			continue
@@ -2442,7 +2590,7 @@ func _use_hoe(target_tile: Vector2i) -> void:
 		valid_tiles.append(t)
 
 	if valid_tiles.is_empty():
-		if not ARABLE_RECT.has_point(target_tile):
+		if not _is_tile_arable(target_tile):
 			_show_toast("Are apenas dentro do canteiro cercado!")
 			_play_sfx("play_error")
 		return
@@ -2698,7 +2846,7 @@ func _plant_seed(target_tile: Vector2i, crop_id: String) -> void:
 
 
 func _place_sprinkler(target_tile: Vector2i) -> void:
-	if not ARABLE_RECT.has_point(target_tile):
+	if not _is_tile_arable(target_tile):
 		_show_toast("Instale o aspersor dentro do canteiro!")
 		_play_sfx("play_error")
 		return
@@ -2908,6 +3056,11 @@ func _on_day_advanced(_new_day: int) -> void:
 		if is_instance_valid(villager) and villager.has_method("reset_daily"):
 			villager.call("reset_daily")
 
+	_orchard_harvested_today.clear()
+	if _mine_interior != null and _mine_interior.has_method("reset_daily"):
+		_mine_interior.call("reset_daily")
+	if _pet_companion != null and _pet_companion.has_method("reset_daily"):
+		_pet_companion.call("reset_daily")
 	_sync_villagers(true)
 	var today_fest: Dictionary = _get_active_festival()
 	if not today_fest.is_empty():
@@ -3165,7 +3318,7 @@ func _restore_world_state(data: Dictionary) -> void:
 		for pair in sprinkler_list:
 			if pair is Array and (pair as Array).size() >= 2:
 				var sp_tile := Vector2i(int(pair[0]), int(pair[1]))
-				if ARABLE_RECT.has_point(sp_tile) and not _crops.has(sp_tile):
+				if _is_tile_arable(sp_tile) and not _crops.has(sp_tile):
 					_sprinklers[sp_tile] = _create_sprinkler_sprite(sp_tile, false)
 
 	var animals_data: Variant = data.get("animals", [])
@@ -3236,8 +3389,10 @@ func _update_day_night_tint() -> void:
 	if day_night_modulate == null or _game_state == null:
 		return
 	var mins: float = float(_game_state.get("time_minutes"))
-	if _current_location == "house":
-		if mins >= 1110.0:
+	if _current_location == "house" or _current_location == "village_interior" or _current_location == "mine":
+		if _current_location == "mine":
+			day_night_modulate.color = Color(0.96, 0.94, 0.92)
+		elif mins >= 1110.0:
 			var t_in: float = clampf((mins - 1110.0) / 300.0, 0.0, 1.0)
 			day_night_modulate.color = Color(1.0, 0.98, 0.94).lerp(Color(0.92, 0.85, 0.78), t_in)
 		else:
@@ -3284,7 +3439,7 @@ func _update_day_night_tint() -> void:
 func _update_target_cursor(shop_open: bool) -> void:
 	if tile_cursor == null or player == null:
 		return
-	if shop_open or _current_location == "house" or _current_location == "village" or _is_transitioning:
+	if shop_open or _current_location != "farm" or _is_transitioning:
 		tile_cursor.visible = false
 		for extra in _extra_cursor_rects:
 			extra.visible = false
@@ -3321,7 +3476,7 @@ func _update_target_cursor(shop_open: bool) -> void:
 			for t in area_tiles:
 				if t == _current_target_tile or idx >= _extra_cursor_rects.size():
 					continue
-				if not ARABLE_RECT.has_point(t):
+				if not _is_tile_arable(t):
 					continue
 				var rect_box: ColorRect = _extra_cursor_rects[idx]
 				rect_box.global_position = Vector2(t.x * TILE_SIZE + 1, t.y * TILE_SIZE + 1)
@@ -3340,6 +3495,36 @@ func _update_prompt_label(shop_open: bool) -> void:
 	var p_pos: Vector2 = player.global_position
 	var hint: String = ""
 	var anchor: Vector2 = p_pos + Vector2(0.0, -24.0)
+
+	if _current_location == "mine":
+		if _mine_interior != null:
+			var near_m: Dictionary = _mine_interior.call("get_nearest_interactable", p_pos)
+			if not near_m.is_empty():
+				hint = str(near_m.get("prompt", ""))
+				anchor = near_m.get("anchor", p_pos + Vector2(0.0, -22.0))
+		if hint.is_empty():
+			_prompt_label.visible = false
+		else:
+			_prompt_label.visible = true
+			_prompt_label.text = hint
+			_prompt_label.reset_size()
+			_prompt_label.global_position = anchor - Vector2(_prompt_label.size.x * 0.5, 0.0)
+		return
+
+	if _current_location == "village_interior":
+		if _village_interior != null:
+			var near_vi: Dictionary = _village_interior.call("get_nearest_interactable", p_pos)
+			if not near_vi.is_empty():
+				hint = str(near_vi.get("prompt", ""))
+				anchor = near_vi.get("anchor", p_pos + Vector2(0.0, -22.0))
+		if hint.is_empty():
+			_prompt_label.visible = false
+		else:
+			_prompt_label.visible = true
+			_prompt_label.text = hint
+			_prompt_label.reset_size()
+			_prompt_label.global_position = anchor - Vector2(_prompt_label.size.x * 0.5, 0.0)
+		return
 
 	if _current_location == "village":
 		if _village_world != null:
@@ -3374,6 +3559,9 @@ func _update_prompt_label(shop_open: bool) -> void:
 	var nearby_villager: CharacterBody2D = _find_nearby_villager(p_pos, VILLAGER_INTERACT_REACH)
 	var nearby_animal: CharacterBody2D = _find_nearby_animal(p_pos, ANIMAL_INTERACT_REACH)
 	var nearby_machine: String = _find_nearby_machine(p_pos)
+	var nearby_vdoor: String = _find_nearby_village_door(p_pos, 26.0)
+	var nearby_plot: String = _find_nearby_plot_sign(p_pos, 26.0)
+	var nearby_tree: Dictionary = _find_nearby_orchard_tree(p_pos, 28.0)
 
 	var nearby_folklore_id: String = ""
 	var nearby_folklore_pos: Vector2 = Vector2.ZERO
@@ -3394,6 +3582,26 @@ func _update_prompt_label(shop_open: bool) -> void:
 		var gift_part: String = " | [G] Presentear" if not bool(nearby_villager.get("gifted_today")) else ""
 		hint = "[F] %s (%s)%s%s" % [v_name, v_role, suffix, gift_part]
 		anchor = nearby_villager.global_position + Vector2(0.0, -24.0)
+	elif not nearby_vdoor.is_empty():
+		var d_info: Dictionary = VILLAGE_DOORS[nearby_vdoor]
+		hint = "[F] %s" % str(d_info.get("label", "Entrar"))
+		anchor = (d_info["pos"] as Vector2) + Vector2(0.0, -24.0)
+	elif p_pos.distance_to(MINE_DOOR_POS) <= 30.0:
+		hint = "[F] Entrar na Mina do Ouro Colonial"
+		anchor = MINE_DOOR_POS + Vector2(0.0, -24.0)
+	elif not nearby_plot.is_empty():
+		var p_def: Dictionary = EXTRA_PLOTS[nearby_plot]
+		var st_pos: Vector2 = _tile_center(p_def["sign_tile"] as Vector2i)
+		hint = "[F] Comprar %s (Rs %d)" % [str(p_def["name"]), int(p_def["cost"])]
+		anchor = st_pos + Vector2(0.0, -24.0)
+	elif not nearby_tree.is_empty():
+		var tid: String = str(nearby_tree["id"])
+		var t_pos: Vector2 = _tile_center(nearby_tree["tile"] as Vector2i)
+		hint = "[F] Colher %s" % str(nearby_tree["fruit"]) if not bool(_orchard_harvested_today.get(tid, false)) else "%s (Colhida hoje)" % str(nearby_tree["name"])
+		anchor = t_pos + Vector2(0.0, -26.0)
+	elif _pet_companion != null and is_instance_valid(_pet_companion) and _pet_companion.visible and p_pos.distance_to(_pet_companion.global_position) <= 26.0:
+		hint = "[F] Acariciar Caramelo" if bool(_pet_companion.get("adopted")) else "[F] Adotar Caramelo (Companheiro)"
+		anchor = _pet_companion.global_position + Vector2(0.0, -22.0)
 	elif not nearby_folklore_id.is_empty():
 		var f_info: Dictionary = StoryDataScript.FOLKLORE_INFO.get(nearby_folklore_id, {})
 		hint = "[F] Conversar com %s" % str(f_info.get("name", nearby_folklore_id))
@@ -3687,6 +3895,10 @@ func _set_exterior_active(active: bool) -> void:
 			villager.visible = active
 			villager.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
 
+	if _pet_companion != null and is_instance_valid(_pet_companion):
+		_pet_companion.visible = active
+		_pet_companion.process_mode = Node.PROCESS_MODE_INHERIT if active else Node.PROCESS_MODE_DISABLED
+
 	if _house_interior != null and is_instance_valid(_house_interior):
 		var show_house: bool = (_current_location == "house")
 		_house_interior.visible = show_house
@@ -3697,10 +3909,18 @@ func _apply_location_state(loc: String, target_pos: Vector2, facing: Vector2i) -
 	_current_location = loc
 	var inside_house: bool = (loc == "house")
 	var in_village: bool = (loc == "village")
+	var in_v_interior: bool = (loc == "village_interior")
+	var in_mine: bool = (loc == "mine")
 	_set_exterior_active(loc == "farm")
 	if _village_world != null and is_instance_valid(_village_world):
 		_village_world.visible = in_village
 		_village_world.process_mode = Node.PROCESS_MODE_INHERIT if in_village else Node.PROCESS_MODE_DISABLED
+	if _village_interior != null and is_instance_valid(_village_interior):
+		_village_interior.visible = in_v_interior
+		_village_interior.process_mode = Node.PROCESS_MODE_INHERIT if in_v_interior else Node.PROCESS_MODE_DISABLED
+	if _mine_interior != null and is_instance_valid(_mine_interior):
+		_mine_interior.visible = in_mine
+		_mine_interior.process_mode = Node.PROCESS_MODE_INHERIT if in_mine else Node.PROCESS_MODE_DISABLED
 
 	if player != null:
 		var target_parent: Node = self
@@ -3708,6 +3928,10 @@ func _apply_location_state(loc: String, target_pos: Vector2, facing: Vector2i) -
 			target_parent = _house_interior
 		elif in_village and _village_world != null:
 			target_parent = _village_world
+		elif in_v_interior and _village_interior != null:
+			target_parent = _village_interior
+		elif in_mine and _mine_interior != null:
+			target_parent = _mine_interior
 		if player.get_parent() != target_parent:
 			player.reparent(target_parent, true)
 		player.global_position = target_pos
@@ -3719,6 +3943,16 @@ func _apply_location_state(loc: String, target_pos: Vector2, facing: Vector2i) -
 			var walk_b: Rect2 = _house_interior.call("get_walk_bounds")
 			if player.has_method("set_camera_and_walk_bounds"):
 				player.call("set_camera_and_walk_bounds", cam_b, walk_b)
+		elif in_v_interior and _village_interior != null:
+			var vi_cam: Rect2i = _village_interior.call("get_camera_bounds")
+			var vi_walk: Rect2 = _village_interior.call("get_walk_bounds")
+			if player.has_method("set_camera_and_walk_bounds"):
+				player.call("set_camera_and_walk_bounds", vi_cam, vi_walk)
+		elif in_mine and _mine_interior != null:
+			var m_cam: Rect2i = _mine_interior.call("get_camera_bounds")
+			var m_walk: Rect2 = _mine_interior.call("get_walk_bounds")
+			if player.has_method("set_camera_and_walk_bounds"):
+				player.call("set_camera_and_walk_bounds", m_cam, m_walk)
 		elif in_village and _village_world != null:
 			var v_cam: Rect2i = _village_world.call("get_camera_bounds")
 			if player.has_method("set_camera_limits"):
@@ -3729,6 +3963,251 @@ func _apply_location_state(loc: String, target_pos: Vector2, facing: Vector2i) -
 			player.call("snap_camera")
 
 	_update_day_night_tint()
+
+
+func _setup_mine_and_pet() -> void:
+	_mine_interior = MineInteriorScript.new() as Node2D
+	if _mine_interior != null:
+		_mine_interior.name = "MineInterior"
+		_mine_interior.position = MINE_ORIGIN
+		_mine_interior.visible = false
+		_mine_interior.process_mode = Node.PROCESS_MODE_DISABLED
+		add_child(_mine_interior)
+
+	_pet_companion = PetCompanionScript.new() as Node2D
+	if _pet_companion != null:
+		_pet_companion.name = "CarameloPet"
+		_pet_companion.position = PET_ADOPT_POS
+		add_child(_pet_companion)
+		var saved_pet: String = str(_game_state.get("pet_type")) if _game_state != null else ""
+		if not saved_pet.is_empty() and player != null:
+			_pet_companion.call("set_adopted", true, player)
+			_pet_companion.global_position = player.global_position + Vector2(-18.0, 4.0)
+
+
+func _is_tile_arable(tile: Vector2i) -> bool:
+	if ARABLE_RECT.has_point(tile):
+		return true
+	if _game_state != null:
+		var unlocked_val: Variant = _game_state.get("unlocked_plots")
+		if unlocked_val is Array:
+			for pid_var in (unlocked_val as Array):
+				var pid: String = str(pid_var)
+				if EXTRA_PLOTS.has(pid):
+					var r: Rect2i = EXTRA_PLOTS[pid]["rect"]
+					if r.has_point(tile):
+						return true
+	return false
+
+
+func _find_nearby_plot_sign(world_pos: Vector2, max_dist: float) -> String:
+	var unlocked_val: Variant = _game_state.get("unlocked_plots") if _game_state != null else []
+	var unlocked: Array = unlocked_val if unlocked_val is Array else []
+	for pid in EXTRA_PLOTS.keys():
+		if pid in unlocked:
+			continue
+		var st: Vector2i = EXTRA_PLOTS[pid]["sign_tile"]
+		if world_pos.distance_to(_tile_center(st)) <= max_dist:
+			return str(pid)
+	return ""
+
+
+func _find_nearby_orchard_tree(world_pos: Vector2, max_dist: float) -> Dictionary:
+	for ot in ORCHARD_TREES:
+		var t_pos: Vector2 = _tile_center(ot["tile"] as Vector2i)
+		if world_pos.distance_to(t_pos) <= max_dist:
+			return ot
+	return {}
+
+
+func _harvest_orchard_tree(tree_def: Dictionary) -> void:
+	if _game_state == null or player == null:
+		return
+	var tid: String = str(tree_def["id"])
+	if bool(_orchard_harvested_today.get(tid, false)):
+		_show_toast("%s já foi colhida hoje! Volte amanhã." % str(tree_def["name"]))
+		return
+	_orchard_harvested_today[tid] = true
+	var price: int = int(tree_def["price"])
+	var energy: int = int(tree_def["energy"])
+	var cur_m: int = int(_game_state.get("money")) + price
+	_game_state.set("money", cur_m)
+	if _game_state.has_signal("money_changed"):
+		_game_state.money_changed.emit(cur_m)
+	var cur_s: int = int(_game_state.get("stamina"))
+	var max_s: int = int(_game_state.get("max_stamina"))
+	var new_s: int = mini(max_s, cur_s + energy)
+	_game_state.set("stamina", new_s)
+	if _game_state.has_signal("stamina_changed"):
+		_game_state.stamina_changed.emit(new_s, max_s)
+	var t_pos: Vector2 = _tile_center(tree_def["tile"] as Vector2i)
+	_play_sfx("play_harvest")
+	_spawn_particles(t_pos, Color(1.0, 0.78, 0.28))
+	_spawn_floating_text(t_pos + Vector2(0.0, -20.0), "+Rs %d / +%d En" % [price, energy], Color(1.0, 0.90, 0.35))
+	_show_toast("Colheu %s fresca no Pomar! (+Rs %d e +%d Energia)" % [str(tree_def["fruit"]), price, energy])
+
+
+func _enter_mine() -> void:
+	if _mine_interior == null or _is_transitioning or _current_location == "mine":
+		return
+	var spawn_pos: Vector2 = _mine_interior.call("get_spawn_world_pos")
+	_play_sfx("play_door")
+	_run_fade_transition(func() -> void:
+		_apply_location_state("mine", spawn_pos, Vector2i(0, -1))
+		_show_toast("Mina do Ouro Colonial — Pressione F nos veios para minerar!")
+	)
+
+
+func _exit_mine() -> void:
+	if _is_transitioning or _current_location != "mine":
+		return
+	_play_sfx("play_door")
+	_run_fade_transition(func() -> void:
+		_apply_location_state("farm", MINE_EXIT_SPAWN_POS, Vector2i(0, 1))
+	)
+
+
+func _handle_mine_interact() -> void:
+	if _mine_interior == null or player == null or _game_state == null:
+		return
+	var near_m: Dictionary = _mine_interior.call("get_nearest_interactable", player.global_position)
+	if near_m.is_empty():
+		return
+	var obj_id: String = str(near_m.get("id", ""))
+	if obj_id == "exit":
+		_exit_mine()
+		return
+	if obj_id == "vein":
+		var cur_s: int = int(_game_state.get("stamina"))
+		if cur_s < 4:
+			_show_toast("Sem energia para minerar! Descanse ou coma algo.")
+			_play_sfx("play_error")
+			return
+		var new_s: int = maxi(0, cur_s - 4)
+		_game_state.set("stamina", new_s)
+		if _game_state.has_signal("stamina_changed"):
+			_game_state.stamina_changed.emit(new_s, int(_game_state.get("max_stamina")))
+		var mined: Dictionary = _mine_interior.call("mine_vein", int(near_m["vein_idx"]))
+		if not mined.is_empty():
+			var ore_id: String = str(mined["ore_id"])
+			var ore_name: String = str(mined["ore_name"])
+			_game_state.call("add_mineral", ore_id, 1)
+			_play_sfx("play_hoe")
+			var wp: Vector2 = near_m.get("world_pos", player.global_position)
+			_spawn_particles(wp, mined.get("color", Color.WHITE) as Color)
+			_spawn_floating_text(wp + Vector2(0.0, -14.0), "+1 %s" % ore_name, Color(1.0, 0.92, 0.45))
+			_show_toast("Minerou +1 %s! Venda na Bigorna da Ferraria (+20%%)." % ore_name)
+
+
+func _interact_with_pet() -> void:
+	if _pet_companion == null or _game_state == null or player == null:
+		return
+	_pet_companion.call("trigger_happy_hop")
+	_play_sfx("play_click")
+	if not bool(_pet_companion.get("adopted")):
+		_pet_companion.call("set_adopted", true, player)
+		_game_state.set("pet_type", "caramelo")
+		_spawn_particles(_pet_companion.global_position, Color(1.0, 0.55, 0.65))
+		_spawn_floating_text(_pet_companion.global_position + Vector2(0.0, -18.0), "Au au! ♥", Color(1.0, 0.62, 0.72))
+		_show_toast("Você adotou o Caramelo! Agora ele te acompanha pela Fazenda e Vila!")
+		return
+	if not bool(_pet_companion.get("found_gift_today")):
+		_pet_companion.set("found_gift_today", true)
+		var bonus_rs: int = _rng.randi_range(18, 35)
+		var cur_m: int = int(_game_state.get("money")) + bonus_rs
+		_game_state.set("money", cur_m)
+		if _game_state.has_signal("money_changed"):
+			_game_state.money_changed.emit(cur_m)
+		_spawn_particles(_pet_companion.global_position, Color(1.0, 0.88, 0.35))
+		_spawn_floating_text(_pet_companion.global_position + Vector2(0.0, -18.0), "Achou +Rs %d!" % bonus_rs, Color(1.0, 0.90, 0.35))
+		_show_toast("Caramelo farejou moedas coloniais antigas! (+Rs %d)" % bonus_rs)
+	else:
+		_spawn_particles(_pet_companion.global_position, Color(1.0, 0.55, 0.65))
+		_spawn_floating_text(_pet_companion.global_position + Vector2(0.0, -18.0), "♥ Caramelo", Color(1.0, 0.62, 0.72))
+		_show_toast("Caramelo abana o rabo feliz ao seu lado!")
+
+
+func _setup_village_interior() -> void:
+	_village_interior = VillageInteriorScript.new() as Node2D
+	if _village_interior == null:
+		return
+	_village_interior.name = "VillageInterior"
+	_village_interior.position = VILLAGE_INTERIOR_ORIGIN
+	_village_interior.visible = false
+	_village_interior.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(_village_interior)
+
+
+func _find_nearby_village_door(world_pos: Vector2, max_dist: float) -> String:
+	for d_id in VILLAGE_DOORS.keys():
+		var d_info: Dictionary = VILLAGE_DOORS[d_id]
+		var d_pos: Vector2 = d_info["pos"]
+		if world_pos.distance_to(d_pos) <= max_dist:
+			return str(d_id)
+	return ""
+
+
+func _enter_village_interior(interior_id: String) -> void:
+	if _village_interior == null or _is_transitioning or _current_location == "village_interior":
+		return
+	_active_village_interior_id = interior_id
+	_village_interior.call("configure", interior_id)
+	var spawn_pos: Vector2 = _village_interior.call("get_spawn_world_pos")
+	_play_sfx("play_door")
+	_run_fade_transition(func() -> void:
+		_apply_location_state("village_interior", spawn_pos, Vector2i(0, -1))
+	)
+
+
+func _exit_village_interior() -> void:
+	if _is_transitioning or _current_location != "village_interior":
+		return
+	var exit_pos: Vector2 = Vector2(44.5 * 16.0, 8.7 * 16.0)
+	if VILLAGE_DOORS.has(_active_village_interior_id):
+		exit_pos = VILLAGE_DOORS[_active_village_interior_id]["exit"]
+	_play_sfx("play_door")
+	_run_fade_transition(func() -> void:
+		_apply_location_state("farm", exit_pos, Vector2i(0, 1))
+	)
+
+
+func _handle_village_interior_interact() -> void:
+	if _village_interior == null or player == null or _game_state == null:
+		return
+	var near_obj: Dictionary = _village_interior.call("get_nearest_interactable", player.global_position)
+	if near_obj.is_empty():
+		return
+	var obj_id: String = str(near_obj.get("id", ""))
+	match obj_id:
+		"exit":
+			_exit_village_interior()
+		"shop_counter", "forge_upgrades":
+			if hud != null and hud.has_method("toggle_shop"):
+				hud.call("toggle_shop")
+		"order_ledger":
+			if hud != null and hud.has_method("toggle_journal"):
+				hud.call("toggle_journal", 0)
+		"anvil_info":
+			var earned: int = int(_game_state.call("sell_all_minerals", 1.20))
+			if earned > 0:
+				_play_sfx("play_coin")
+				_spawn_floating_text(player.global_position + Vector2(0.0, -16.0), "+Rs %d (+20%% Ferraria)" % earned, Color(1.0, 0.88, 0.25))
+		"buy_elixir":
+			if bool(_game_state.call("buy_instant_energy", 65, 60, "Elixir de Ervas")):
+				_play_sfx("play_cozy")
+				_spawn_floating_text(player.global_position + Vector2(0.0, -16.0), "+60 Energia!", Color(0.55, 0.96, 0.65))
+		"buy_tea":
+			if bool(_game_state.call("buy_instant_energy", 35, 30, "Chá de Cidreira")):
+				_play_sfx("play_cozy")
+				_spawn_floating_text(player.global_position + Vector2(0.0, -16.0), "+30 Energia!", Color(0.65, 0.96, 0.72))
+		"buy_meal":
+			if bool(_game_state.call("buy_instant_energy", 90, 70, "Prato Feito Colonial")):
+				_play_sfx("play_cozy")
+				_spawn_floating_text(player.global_position + Vector2(0.0, -16.0), "+70 Energia!", Color(1.0, 0.88, 0.45))
+		"buy_pao":
+			if bool(_game_state.call("buy_instant_energy", 60, 45, "Pão de Queijo Quente")):
+				_play_sfx("play_cozy")
+				_spawn_floating_text(player.global_position + Vector2(0.0, -16.0), "+45 Energia!", Color(1.0, 0.88, 0.45))
 
 
 func _setup_village_world() -> void:
@@ -3902,10 +4381,7 @@ func _interact_with_house_object(obj: Dictionary) -> void:
 		"bed":
 			_sleep_in_bed()
 		"stove":
-			if _tea_used_today:
-				_play_sfx("play_cozy")
-				_show_toast("Você já tomou o chá da fazenda hoje!")
-			else:
+			if not _tea_used_today:
 				_tea_used_today = true
 				var cur_stam: int = int(_game_state.get("stamina"))
 				var max_stam: int = int(_game_state.get("max_stamina"))
@@ -3915,8 +4391,12 @@ func _interact_with_house_object(obj: Dictionary) -> void:
 					_game_state.stamina_changed.emit(new_stam, max_stam)
 				_play_sfx("play_cozy")
 				_spawn_particles(world_pos + Vector2(0.0, -8.0), Color(1.0, 0.85, 0.45))
-				_spawn_floating_text(world_pos + Vector2(0.0, -16.0), "+20 Energia", Color(0.65, 1.0, 0.58))
-				_show_toast("Chá quentinho da fazenda! +20 Energia.")
+				_spawn_floating_text(world_pos + Vector2(0.0, -16.0), "+20 Energia (Chá)", Color(0.65, 1.0, 0.58))
+				_show_toast("Chá quentinho da fazenda (+20 Energia) — Fogão pronto para cozinhar!")
+			else:
+				_play_sfx("play_cozy")
+			if hud != null and hud.has_method("open_cooking"):
+				hud.call("open_cooking")
 		"fireplace":
 			_play_sfx("play_cozy")
 			_spawn_particles(world_pos + Vector2(0.0, -8.0), Color(1.0, 0.58, 0.22))

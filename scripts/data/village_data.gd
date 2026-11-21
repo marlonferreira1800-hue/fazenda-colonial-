@@ -420,6 +420,50 @@ static func get_villager_specs(tile_size: int) -> Array[Dictionary]:
 				],
 			},
 		},
+		{
+			"id": "pedrinho",
+			"name": "Pedrinho",
+			"role": "Criança da Vila",
+			"home_node": "sinha_front",
+			"home_door_pos": Vector2(52.5 * ts, 20.0 * ts),
+			"sprite": "res://assets/sprites/colonial_buildings_px/villager_pedrinho.png",
+			"speed": 38.0,
+			"schedule": [
+				{"start_min": 420.0, "node": "praca_s", "activity": "Brincando de pega-pega", "indoors": false, "shelter_in_rain": true, "chatter": ["Pega eu, Mariquinha!", "Oba! Olha o fazendeiro!"]},
+				{"start_min": 680.0, "node": "praca_w", "activity": "Soltando pião na Praça", "indoors": false, "shelter_in_rain": true, "chatter": ["Meu pião gira mais rápido!"]},
+				{"start_min": 900.0, "node": "praca_e", "activity": "Correndo no Coreto", "indoors": false, "shelter_in_rain": true, "chatter": ["Vamos ver os bichos da fazenda!"]},
+				{"start_min": 1110.0, "node": "sinha_front", "activity": "Voltando pra casa", "indoors": true, "chatter": []},
+			],
+			"dialogues": {
+				"morning": ["Oi, moço! Eu e a Mariquinha estamos brincando de pega-pega na Praça!"],
+				"afternoon": ["Você já viu o Saci ou a Iara perto do lago? Eu juro que ouvi um assobio!"],
+				"evening": ["Minha mãe chamou pro jantar! Até amanhã!"],
+				"rainy": ["Ah, chuva... mas Dona Sinhá fez bolinho de chuva!"],
+				"friend": ["Quando eu crescer quero ter uma fazenda bonita igual a sua!"],
+			},
+		},
+		{
+			"id": "mariquinha",
+			"name": "Mariquinha",
+			"role": "Criança da Vila",
+			"home_node": "pescador_front",
+			"home_door_pos": Vector2(44.5 * ts, 20.0 * ts),
+			"sprite": "res://assets/sprites/colonial_buildings_px/villager_mariquinha.png",
+			"speed": 37.0,
+			"schedule": [
+				{"start_min": 420.0, "node": "praca_s", "activity": "Brincando de roda", "indoors": false, "shelter_in_rain": true, "chatter": ["Ciranda, cirandinha ♪", "Corre, Pedrinho!"]},
+				{"start_min": 680.0, "node": "praca_e", "activity": "Colhendo florzinhas", "indoors": false, "shelter_in_rain": true, "chatter": ["Olha essa flor amarela!"]},
+				{"start_min": 900.0, "node": "praca_w", "activity": "Brincando perto do Poço", "indoors": false, "shelter_in_rain": true, "chatter": ["Adoro o Caramelo!"]},
+				{"start_min": 1110.0, "node": "pescador_front", "activity": "Voltando pra casa", "indoors": true, "chatter": []},
+			],
+			"dialogues": {
+				"morning": ["Bom dia! A Praça do Coreto é o melhor lugar pra brincar!"],
+				"afternoon": ["O Caramelo adora correr atrás de borboletas aqui na Praça!"],
+				"evening": ["Já tá acendendo os lampiões, hora de ir pra casa!"],
+				"rainy": ["Gosto de pular poça d'água quando a chuva passa!"],
+				"friend": ["Você é o vizinho mais legal da Vila de São Sebastião!"],
+			},
+		},
 	]
 
 
@@ -467,6 +511,8 @@ const FAVORITE_GIFTS: Dictionary = {
 	"sinha": ["pumpkin", "wool", "milk", "egg"],
 	"ze": ["honey", "wheat", "cheese", "corn"],
 	"chico": ["corn", "tomato", "carrot", "farinha_mandioca"],
+	"pedrinho": ["honey", "corn", "egg", "wheat"],
+	"mariquinha": ["honey", "milk", "egg", "strawberry"],
 }
 
 const FESTIVAL_SPOTS: Dictionary = {
@@ -478,6 +524,8 @@ const FESTIVAL_SPOTS: Dictionary = {
 	"sinha": "praca_se",
 	"ze": "praca_s",
 	"chico": "praca_e",
+	"pedrinho": "praca_s",
+	"mariquinha": "praca_w",
 }
 
 
