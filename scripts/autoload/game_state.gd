@@ -168,6 +168,9 @@ var npc_talked_today: Dictionary = {}
 var folklore_discovered: Array[String] = []
 var book_chapters_read: Array[String] = []
 var book_bonus_claimed_today: bool = false
+var sitio_relics_unlocked: Array[String] = []
+var sitio_magic_used_today: Dictionary = {}
+var sitio_active_aura: String = ""
 var gold_items: Dictionary = {}
 
 var owned_machines: Dictionary = {
@@ -911,6 +914,27 @@ func mark_book_chapter_read(chapter_id: String) -> Dictionary:
 	return {"bonus_granted": bonus_granted, "first_read": first_read}
 
 
+func unlock_sitio_relic(realm_id: String) -> bool:
+	if not StoryDataScript.SITIO_REALMS.has(realm_id):
+		return false
+	if sitio_relics_unlocked.has(realm_id):
+		return false
+	sitio_relics_unlocked.append(realm_id)
+	story_changed.emit()
+	return true
+
+
+func can_use_sitio_magic(realm_id: String) -> bool:
+	return not bool(sitio_magic_used_today.get(realm_id, false))
+
+
+func mark_sitio_magic_used(realm_id: String) -> void:
+	sitio_magic_used_today[realm_id] = true
+	sitio_active_aura = realm_id
+	unlock_sitio_relic(realm_id)
+	story_changed.emit()
+
+
 func start_machine(machine_id: String) -> String:
 	if not bool(owned_machines.get(machine_id, false)) or not FarmCatalogScript.MACHINES.has(machine_id):
 		return "not_owned"
@@ -1101,6 +1125,8 @@ func set_touch_mode(mode: String) -> void:
 func advance_day() -> void:
 	npc_talked_today.clear()
 	book_bonus_claimed_today = false
+	sitio_magic_used_today.clear()
+	sitio_active_aura = ""
 	day += 1
 	time_minutes = START_OF_DAY_MINUTES
 	_last_emitted_minute = int(time_minutes)
@@ -1329,6 +1355,9 @@ func save_game(show_toast: bool = true) -> bool:
 		"folklore_discovered": folklore_discovered.duplicate(true),
 		"book_chapters_read": book_chapters_read.duplicate(true),
 		"book_bonus_claimed_today": book_bonus_claimed_today,
+		"sitio_relics_unlocked": sitio_relics_unlocked.duplicate(true),
+		"sitio_magic_used_today": sitio_magic_used_today.duplicate(true),
+		"sitio_active_aura": sitio_active_aura,
 		"animal_count": animal_count,
 		"world": world_data,
 	}
@@ -1435,6 +1464,17 @@ func load_game() -> bool:
 		for bid in loaded_br:
 			book_chapters_read.append(str(bid))
 	book_bonus_claimed_today = bool(data.get("book_bonus_claimed_today", false))
+	sitio_relics_unlocked.clear()
+	var loaded_sr = data.get("sitio_relics_unlocked", [])
+	if loaded_sr is Array:
+		for srid in loaded_sr:
+			sitio_relics_unlocked.append(str(srid))
+	sitio_magic_used_today.clear()
+	var loaded_sm = data.get("sitio_magic_used_today", {})
+	if loaded_sm is Dictionary:
+		for smk in loaded_sm.keys():
+			sitio_magic_used_today[str(smk)] = bool(loaded_sm[smk])
+	sitio_active_aura = str(data.get("sitio_active_aura", ""))
 	if str(story_quests.get("fogo_estrada_real", "")) == "completed":
 		max_stamina += 15
 		stamina = clampi(stamina, 0, max_stamina)
@@ -1579,6 +1619,9 @@ func reset_save() -> void:
 	folklore_discovered.clear()
 	book_chapters_read.clear()
 	book_bonus_claimed_today = false
+	sitio_relics_unlocked.clear()
+	sitio_magic_used_today.clear()
+	sitio_active_aura = ""
 	gold_items.clear()
 	owned_machines = {
 		"cheese_press": false,

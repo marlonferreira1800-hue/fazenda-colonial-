@@ -819,6 +819,207 @@ def generate_village_npcs() -> None:
     _generate_villager_npc("npc_quiteria.png", (240, 232, 218, 255), (56, 106, 156, 255), (234, 196, 92, 255))
 
 
+def generate_sitio_assets() -> None:
+    sitio_dir = OUT_DIR.parent / "sitio_px"
+    sitio_dir.mkdir(parents=True, exist_ok=True)
+    outline = (34, 26, 24, 255)
+
+    def save_npc(filename: str, hair, outfit, accent, skin=(222, 178, 144, 255), tall_hat=False, glasses=False) -> None:
+        img = Image.new("RGBA", (16, 22), (0, 0, 0, 0))
+        rect(img, 4, 19, 11, 21, (20, 20, 26, 85))
+        if tall_hat:
+            # Cartola (Visconde)
+            rect(img, 5, 0, 10, 4, outline)
+            rect(img, 6, 1, 9, 3, (46, 42, 50, 255))
+            rect(img, 3, 4, 12, 5, outline)
+            rect(img, 4, 4, 11, 4, (74, 68, 80, 255))
+        else:
+            rect(img, 4, 2, 11, 5, outline)
+            rect(img, 5, 3, 10, 4, hair)
+        rect(img, 5, 5, 10, 9, outline)
+        rect(img, 6, 6, 9, 8, skin)
+        px(img, 7, 7, outline)
+        px(img, 9, 7, outline)
+        if glasses:
+            px(img, 6, 7, (238, 210, 118, 255))
+            px(img, 8, 7, (238, 210, 118, 255))
+            px(img, 10, 7, (238, 210, 118, 255))
+        rect(img, 4, 10, 11, 17, outline)
+        rect(img, 5, 11, 10, 16, outfit)
+        rect(img, 7, 11, 8, 15, accent)
+        rect(img, 5, 17, 6, 20, outline)
+        rect(img, 9, 17, 10, 20, outline)
+        img.save(sitio_dir / filename)
+
+    # Personagens clássicos do Sítio (domínio público)
+    save_npc("npc_dona_benta.png", (226, 224, 232, 255), (124, 96, 152, 255), (244, 236, 214, 255), glasses=True)
+    save_npc("npc_tia_nastacia.png", (244, 240, 232, 255), (176, 68, 62, 255), (246, 244, 238, 255), skin=(134, 88, 60, 255))
+    save_npc("npc_narizinho.png", (102, 62, 42, 255), (218, 118, 148, 255), (248, 238, 210, 255))
+    save_npc("npc_pedrinho.png", (96, 62, 38, 255), (234, 228, 210, 255), (84, 114, 162, 255))
+    save_npc("npc_tio_barnabe.png", (206, 176, 108, 255), (186, 168, 134, 255), (118, 86, 56, 255), skin=(122, 80, 54, 255))
+    save_npc("npc_visconde.png", (236, 198, 64, 255), (62, 136, 78, 255), (242, 204, 72, 255), skin=(242, 206, 76, 255), tall_hat=True)
+
+    # Emília (cabelo vermelho e amarelo de pano + vestido vibrante)
+    emilia = Image.new("RGBA", (16, 22), (0, 0, 0, 0))
+    rect(emilia, 4, 19, 11, 21, (20, 20, 26, 85))
+    rect(emilia, 3, 2, 12, 6, outline)
+    rect(emilia, 4, 3, 7, 5, (226, 62, 52, 255))
+    rect(emilia, 8, 3, 11, 5, (244, 206, 58, 255))
+    rect(emilia, 5, 6, 10, 10, outline)
+    rect(emilia, 6, 7, 9, 9, (242, 210, 184, 255))
+    px(emilia, 7, 8, outline)
+    px(emilia, 9, 8, outline)
+    rect(emilia, 4, 11, 11, 17, outline)
+    rect(emilia, 5, 12, 7, 16, (228, 68, 58, 255))
+    rect(emilia, 8, 12, 10, 16, (244, 206, 58, 255))
+    rect(emilia, 5, 17, 6, 20, outline)
+    rect(emilia, 9, 17, 10, 20, outline)
+    emilia.save(sitio_dir / "npc_emilia.png")
+
+    # Cuca (jacaré esmeralda + cabeleira amarela)
+    cuca = Image.new("RGBA", (18, 24), (0, 0, 0, 0))
+    rect(cuca, 4, 21, 13, 23, (16, 12, 24, 95))
+    rect(cuca, 3, 1, 14, 7, outline)
+    rect(cuca, 4, 2, 13, 6, (242, 206, 62, 255))
+    rect(cuca, 5, 5, 12, 10, outline)
+    rect(cuca, 6, 6, 11, 9, (64, 152, 78, 255))
+    px(cuca, 7, 7, (250, 234, 92, 255))
+    px(cuca, 10, 7, (250, 234, 92, 255))
+    rect(cuca, 4, 11, 13, 19, outline)
+    rect(cuca, 5, 12, 12, 18, (88, 52, 126, 255))
+    rect(cuca, 7, 12, 10, 17, (72, 164, 86, 255))
+    rect(cuca, 5, 19, 7, 22, outline)
+    rect(cuca, 10, 19, 12, 22, outline)
+    cuca.save(sitio_dir / "npc_cuca.png")
+
+    # Marquês de Rabicó (porquinho rosado com lacinho vermelho)
+    rabico = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+    rect(rabico, 3, 13, 12, 15, (20, 20, 24, 85))
+    rect(rabico, 3, 5, 12, 12, outline)
+    rect(rabico, 4, 6, 11, 11, (242, 168, 178, 255))
+    rect(rabico, 2, 7, 4, 10, outline)
+    rect(rabico, 3, 8, 4, 9, (226, 126, 144, 255))
+    px(rabico, 6, 7, outline)
+    rect(rabico, 7, 4, 9, 5, (214, 52, 52, 255))
+    rect(rabico, 4, 12, 5, 14, outline)
+    rect(rabico, 10, 12, 11, 14, outline)
+    rabico.save(sitio_dir / "npc_rabico.png")
+
+    # Jabuticabeira Encantada (36x42)
+    jabu = Image.new("RGBA", (36, 42), (0, 0, 0, 0))
+    rect(jabu, 9, 37, 26, 41, (20, 28, 18, 85))
+    # Tronco
+    rect(jabu, 14, 22, 21, 38, outline)
+    rect(jabu, 15, 23, 20, 37, (112, 74, 48, 255))
+    # Jabuticabas roxas brilhantes no tronco
+    for jx, jy in [(16, 25), (19, 27), (16, 30), (19, 33), (17, 35)]:
+        rect(jabu, jx, jy, jx + 1, jy + 1, (76, 34, 116, 255))
+        px(jabu, jx, jy, (176, 116, 232, 255))
+    # Copa frondosa
+    rect(jabu, 5, 6, 30, 24, outline)
+    rect(jabu, 6, 7, 29, 23, (46, 126, 58, 255))
+    rect(jabu, 9, 4, 26, 18, (64, 156, 72, 255))
+    for fx, fy in [(10, 10), (22, 9), (14, 16), (25, 18), (18, 12)]:
+        px(jabu, fx, fy, (252, 232, 118, 255))
+    jabu.save(sitio_dir / "jabuticabeira.png")
+
+    # Caldeirão da Cuca (26x26)
+    cald = Image.new("RGBA", (26, 26), (0, 0, 0, 0))
+    rect(cald, 5, 22, 20, 25, (14, 10, 20, 95))
+    rect(cald, 5, 9, 20, 22, outline)
+    rect(cald, 6, 10, 19, 21, (50, 48, 58, 255))
+    rect(cald, 7, 8, 18, 11, (92, 236, 126, 255))
+    rect(cald, 9, 9, 16, 10, (186, 252, 168, 255))
+    # Bolhas mágicas subindo
+    for bx, by, col in [(10, 5, (148, 250, 164, 255)), (15, 3, (194, 122, 250, 255)), (13, 6, (112, 238, 146, 255))]:
+        rect(cald, bx, by, bx + 1, by + 1, col)
+    cald.save(sitio_dir / "caldeirao_cuca.png")
+
+    # Fonte Luminosa das Águas Claras (28x28)
+    fonte = Image.new("RGBA", (28, 28), (0, 0, 0, 0))
+    rect(fonte, 4, 23, 23, 27, (18, 36, 48, 85))
+    rect(fonte, 4, 14, 23, 24, outline)
+    rect(fonte, 5, 15, 22, 23, (88, 198, 228, 255))
+    rect(fonte, 7, 16, 20, 21, (158, 242, 252, 255))
+    # Coral / concha central
+    rect(fonte, 10, 6, 17, 16, outline)
+    rect(fonte, 11, 7, 16, 15, (238, 124, 166, 255))
+    rect(fonte, 13, 4, 14, 10, (192, 250, 255, 255))
+    px(fonte, 9, 10, (252, 244, 164, 255))
+    px(fonte, 18, 11, (252, 244, 164, 255))
+    fonte.save(sitio_dir / "fonte_aguas.png")
+
+    # Estante Mágica do Visconde (32x34)
+    est = Image.new("RGBA", (32, 34), (0, 0, 0, 0))
+    rect(est, 4, 30, 27, 33, (22, 16, 14, 90))
+    rect(est, 4, 6, 27, 31, outline)
+    rect(est, 5, 7, 26, 30, (124, 78, 44, 255))
+    # Prateleiras com livros coloridos
+    book_cols = [(206, 66, 56, 255), (66, 136, 196, 255), (236, 192, 66, 255), (72, 156, 86, 255), (156, 86, 186, 255)]
+    for row_y in (10, 17, 24):
+        rect(est, 6, row_y + 4, 25, row_y + 5, (86, 52, 28, 255))
+        for bi in range(6):
+            bx = 7 + bi * 3
+            rect(est, bx, row_y, bx + 1, row_y + 3, book_cols[(bi + row_y) % len(book_cols)])
+    # Vela brilhante no topo
+    rect(est, 15, 2, 16, 6, (246, 242, 224, 255))
+    rect(est, 15, 0, 16, 2, (255, 224, 88, 255))
+    est.save(sitio_dir / "estante_visconde.png")
+
+    # Redemoinho Mágico do Saci (24x28)
+    red = Image.new("RGBA", (24, 28), (0, 0, 0, 0))
+    rect(red, 7, 24, 16, 27, (20, 24, 18, 70))
+    rect(red, 9, 19, 14, 24, (196, 222, 148, 200))
+    rect(red, 6, 13, 17, 19, (164, 214, 124, 210))
+    rect(red, 4, 6, 19, 13, (238, 216, 114, 210))
+    for lx, ly in [(5, 8), (17, 10), (8, 15), (15, 17), (11, 4)]:
+        rect(red, lx, ly, lx + 1, ly + 1, (78, 172, 74, 255))
+    px(red, 12, 9, (255, 244, 156, 255))
+    red.save(sitio_dir / "redemoinho_saci.png")
+
+    # Portal de Pó de Pirlimpimpim (32x32)
+    port = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+    for y in range(32):
+        for x in range(32):
+            dx = (x - 15.5) / 13.0
+            dy = (y - 15.5) / 13.0
+            d = (dx * dx + dy * dy) ** 0.5
+            if 0.72 <= d <= 1.0:
+                px(port, x, y, (252, 212, 74, 235))
+            elif 0.40 <= d < 0.72:
+                px(port, x, y, (255, 242, 162, 180))
+            elif d < 0.40:
+                px(port, x, y, (255, 250, 214, 215))
+    for sx, sy in [(6, 7), (25, 8), (8, 24), (24, 23), (15, 3), (16, 28)]:
+        rect(port, sx, sy, sx + 1, sy + 1, (255, 255, 255, 255))
+    port.save(sitio_dir / "portal_pirlimpimpim.png")
+
+    # Mesa de Bolinhos de Chuva (28x22)
+    mesa = Image.new("RGBA", (28, 22), (0, 0, 0, 0))
+    rect(mesa, 3, 18, 24, 21, (20, 16, 14, 85))
+    rect(mesa, 3, 8, 24, 15, outline)
+    rect(mesa, 4, 9, 23, 14, (164, 108, 64, 255))
+    rect(mesa, 5, 15, 7, 19, outline)
+    rect(mesa, 20, 15, 22, 19, outline)
+    # Travessa de bolinhos dourados + bule
+    rect(mesa, 7, 7, 15, 11, (244, 240, 228, 255))
+    for bx, by in [(8, 8), (11, 7), (13, 8), (10, 9)]:
+        rect(mesa, bx, by, bx + 1, by + 1, (222, 156, 66, 255))
+    rect(mesa, 18, 6, 21, 10, (196, 86, 72, 255))
+    mesa.save(sitio_dir / "mesa_bolinhos.png")
+
+    # Cogumelo Mágico (16x18)
+    cogu = Image.new("RGBA", (16, 18), (0, 0, 0, 0))
+    rect(cogu, 4, 14, 11, 17, (16, 12, 24, 80))
+    rect(cogu, 6, 9, 9, 15, outline)
+    rect(cogu, 7, 10, 8, 14, (226, 218, 238, 255))
+    rect(cogu, 3, 4, 12, 10, outline)
+    rect(cogu, 4, 5, 11, 9, (152, 74, 214, 255))
+    px(cogu, 6, 6, (124, 248, 234, 255))
+    px(cogu, 9, 7, (124, 248, 234, 255))
+    cogu.save(sitio_dir / "cogumelo_magico.png")
+
+
 if __name__ == "__main__":
     generate_chafariz()
     generate_capela()
@@ -839,4 +1040,5 @@ if __name__ == "__main__":
     generate_ferraria_colonial()
     generate_venda_colonial()
     generate_village_npcs()
-    print("Sprites coloniais gerados com sucesso em", OUT_DIR)
+    generate_sitio_assets()
+    print("Sprites coloniais e do Sítio gerados com sucesso em", OUT_DIR)
